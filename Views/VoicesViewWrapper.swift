@@ -117,13 +117,34 @@ struct VoicesViewWrapper: View {
             
             if !voices.isEmpty {
                 if hiddenVoices.count > 0 {
-                    Button(action: {
-                        resetHiddenVoices()
-                    }) {
-                        Text("Reset Hidden Voices")
-                            .foregroundColor(.blue)
-                            .padding(.vertical, 10)
+                    HStack {
+                        Button(action: {
+                            resetHiddenVoices()
+                        }) {
+                            Text("Reset Hidden Voices")
+                                .foregroundColor(.blue)
+                        }
+                        
+                        Spacer()
+                        
+                        Button(action: {
+                            exportHiddenVoices()
+                        }) {
+                            Text("Export Hidden List")
+                                .foregroundColor(.blue)
+                        }
+                        
+                        Spacer()
+                        
+                        Button(action: {
+                            importHiddenVoices()
+                        }) {
+                            Text("Import Hidden List")
+                                .foregroundColor(.blue)
+                        }
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
                 }
                 
                 Button(action: {
@@ -276,5 +297,164 @@ struct VoicesViewWrapper: View {
         UserDefaults.standard.synchronize()
         print("All hidden voices reset!")
         loadVoices() // Reload all voices
+    }
+    
+    // Export the list of hidden voice IDs as a JSON file and share
+    private func exportHiddenVoices() {
+        // Create a map of voice names to IDs for better readability when viewing the file
+        var voiceData: [[String: String]] = []
+        
+        // Include hidden voice data with name and ID
+        for identifier in hiddenVoices {
+            // Find corresponding voice if available
+            if let voice = voices.first(where: { $0.identifier == identifier }) {
+                voiceData.append([
+                    "name": voice.name,
+                    "identifier": identifier,
+                    "language": voice.language
+                ])
+            } else {
+                // If voice not found in current list, just include the ID
+                voiceData.append([
+                    "name": "Unknown",
+                    "identifier": identifier,
+                    "language": "unknown"
+                ])
+            }
+        }
+        
+        // Create the final dictionary with metadata
+        let exportData: [String: Any] = [
+            "version": 1,
+            "timestamp": Date().timeIntervalSince1970,
+            "hiddenVoiceCount": hiddenVoices.count,
+            "hiddenVoices": voiceData,
+            "hiddenVoiceIds": hiddenVoices
+        ]
+        
+        // First, try the simpler approach with direct string sharing
+        let jsonStringToShare: String
+        
+        if JSONSerialization.isValidJSONObject(exportData) {
+            do {
+                let jsonData = try JSONSerialization.data(withJSONObject: exportData, options: .prettyPrinted)
+                if let jsonString = String(data: jsonData, encoding: .utf8) {
+                    jsonStringToShare = jsonString
+                    shareText(jsonStringToShare, filename: "ReadHerring_HiddenVoices.json")
+                    return
+                }
+            } catch {
+                print("JSON serialization error: \(error)")
+            }
+        }
+        
+        // Fallback to showing an alert with error
+        showAlert(title: "Export Failed", message: "Unable to prepare voice data for sharing")
+    }
+    
+    // Share text content with a suggested filename
+    private func shareText(_ text: String, filename: String) {
+        // Create a temporary directory URL
+        let tempDir = FileManager.default.temporaryDirectory
+        let fileURL = tempDir.appendingPathComponent(filename)
+        
+        do {
+            // Write the text to the file
+            try text.write(to: fileURL, atomically: true, encoding: .utf8)
+            
+            // Create a share activity view controller
+            let activityViewController = UIActivityViewController(
+                activityItems: [fileURL],
+                applicationActivities: nil
+            )
+            
+            // Configure for iPad presentation
+            if let popoverController = activityViewController.popoverPresentationController {
+                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                   let rootView = windowScene.windows.first?.rootViewController?.view {
+                    popoverController.sourceView = rootView
+                    popoverController.sourceRect = CGRect(
+                        x: rootView.bounds.midX,
+                        y: rootView.bounds.midY,
+                        width: 0,
+                        height: 0
+                    )
+                    popoverController.permittedArrowDirections = []
+                }
+            }
+            
+            // Present the share sheet
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let rootViewController = windowScene.windows.first?.rootViewController {
+                rootViewController.present(activityViewController, animated: true)
+            }
+            
+        } catch {
+            print("Failed to write temporary file: \(error)")
+            showAlert(title: "Share Failed", message: "Could not prepare file for sharing: \(error.localizedDescription)")
+        }
+    }
+    
+    // Import hidden voice IDs from a JSON file
+    private func importHiddenVoices() {
+        // Create document picker to select a JSON file
+        let documentPicker = UIDocumentPickerViewController(forOpeningContentTypes: [.json])
+        documentPicker.allowsMultipleSelection = false
+        documentPicker.delegate = DocumentPickerDelegate { url in
+            self.processImportedFile(at: url)
+        }
+        
+        // Present the document picker
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let rootViewController = windowScene.windows.first?.rootViewController {
+            rootViewController.present(documentPicker, animated: true)
+        }
+    }
+    
+    // Process the imported JSON file
+    private func processImportedFile(at url: URL) {
+        do {
+            let data = try Data(contentsOf: url)
+            
+            // Try to parse as JSON
+            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let importedIds = json["hiddenVoiceIds"] as? [String] {
+                
+                // Update hidden voices with imported IDs
+                hiddenVoices = importedIds
+                UserDefaults.standard.set(hiddenVoices, forKey: "hiddenVoices")
+                UserDefaults.standard.synchronize()
+                
+                // Reload voices to apply changes
+                loadVoices()
+                
+                // Show success message
+                showAlert(title: "Import Successful", 
+                         message: "Imported \(importedIds.count) hidden voice IDs.")
+                
+            } else {
+                showAlert(title: "Import Failed", 
+                         message: "The file does not contain valid hidden voice data.")
+            }
+        } catch {
+            showAlert(title: "Import Failed", 
+                     message: "Error reading file: \(error.localizedDescription)")
+        }
+    }
+    
+    // Helper function to show alerts
+    private func showAlert(title: String, message: String) {
+        let alert = UIAlertController(
+            title: title,
+            message: message,
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        
+        // Present the alert
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let rootViewController = windowScene.windows.first?.rootViewController {
+            rootViewController.present(alert, animated: true)
+        }
     }
 }
