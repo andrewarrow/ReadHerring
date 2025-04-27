@@ -341,7 +341,7 @@ class ScreenplayParser {
     }
     
     // Helper method to check if a line is a scene heading
-    private static func checkIfSceneHeading(_ line: String) -> Bool {
+    static func checkIfSceneHeading(_ line: String) -> Bool {
         let patterns = ["^INT\\.", "^EXT\\.", "^INT/EXT\\.", "^I/E\\.", "^INTERIOR", "^EXTERIOR"]
         for pattern in patterns {
             if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
@@ -440,4 +440,5 @@ class ScreenplayParser {
             }
         }
     }
+    
 }
