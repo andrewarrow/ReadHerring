@@ -148,10 +148,10 @@ struct VoicesViewWrapper: View {
                 }
                 
                 Button(action: {
-                    // Save selected voice and continue to cast view
+                    // Ready to read now goes directly to the ReadAlong view
                     moveToNextScreen()
                 }) {
-                    Text("Continue to Cast Selection")
+                    Text("Ready to Read")
                         .frame(minWidth: 200)
                         .padding()
                         .background(Color.blue)
@@ -159,8 +159,8 @@ struct VoicesViewWrapper: View {
                         .cornerRadius(10)
                 }
                 .padding(.bottom, 20)
-                .disabled(selectedVoice == nil)
-                .opacity(selectedVoice == nil ? 0.5 : 1.0)
+                .disabled(hiddenVoices.isEmpty && selectedVoice == nil)
+                .opacity((hiddenVoices.isEmpty && selectedVoice == nil) ? 0.5 : 1.0)
             }
         }
         .onAppear {

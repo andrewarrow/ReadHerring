@@ -29,7 +29,7 @@ struct ContentView: View {
     @State private var isProcessing = false
     @State private var progress: Float = 0.0
     @State private var screenplaySummary: ScreenplaySummary?
-    @State private var activeView: String = "onboarding" // "onboarding", "voices", "cast", or "main"
+    @State private var activeView: String = "onboarding" // "onboarding", "voices", "cast", "readalong", or "main"
     // Properties and methods moved to CastImage.swift
     // Properties moved to CastFilter.swift
     
@@ -45,7 +45,7 @@ struct ContentView: View {
                 .transition(.opacity)
             } else if activeView == "voices" {
                 VoicesViewWrapper(moveToNextScreen: {
-                    self.activeView = "cast"
+                    self.activeView = "readalong" // Go directly to ReadAlong instead of cast
                 })
                 .transition(.opacity)
             } else if activeView == "cast" {
@@ -55,6 +55,9 @@ struct ContentView: View {
                         self.activeView = "main"
                     }
                 ))
+                .transition(.opacity)
+            } else if activeView == "readalong" {
+                ReadAlongView()
                 .transition(.opacity)
             } else {
                 VStack {
