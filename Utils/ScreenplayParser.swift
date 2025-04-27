@@ -364,6 +364,23 @@ class ScreenplayParser {
         var collectingDialog = false
         var dialogLines = [String]()
         
+        // Special narrator name - must match what's used in ReadAlongView
+        let narratorName = "NARRATOR"
+        
+        // First pass: Add scene headings and descriptions as narrator dialogs
+        for (index, scene) in scenes.enumerated() {
+            // Add scene heading as a dialog from the narrator
+            if !scene.heading.isEmpty {
+                scene.addDialog(character: narratorName, text: scene.heading)
+            }
+            
+            // Add scene description as a dialog from the narrator
+            if !scene.description.isEmpty {
+                scene.addDialog(character: narratorName, text: scene.description)
+            }
+        }
+        
+        // Second pass: Process character dialogs
         for line in lines {
             let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
             
@@ -419,6 +436,14 @@ class ScreenplayParser {
                 var cleanName = trimmedLine
                 if let range = trimmedLine.range(of: "\\(.*?\\)", options: .regularExpression) {
                     cleanName = String(trimmedLine[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                
+                // Don't collect dialog for the narrator - we handle scene descriptions separately
+                if cleanName == narratorName {
+                    collectingDialog = false
+                    dialogLines = []
+                    currentCharacter = ""
+                    continue
                 }
                 
                 // Start new dialog collection

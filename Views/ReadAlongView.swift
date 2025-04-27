@@ -13,6 +13,9 @@ struct ReadAlongView: View {
     @State private var speechSynthesizer = AVSpeechSynthesizer()
     @Environment(\.presentationMode) var presentationMode
     
+    // Special narrator name for scene headings and descriptions
+    private let narratorName = "NARRATOR"
+    
     private var currentScene: Scene? {
         guard !scenes.isEmpty, currentSceneIndex < scenes.count else {
             return nil
@@ -99,10 +102,13 @@ struct ReadAlongView: View {
                 // Character name and dialog text
                 if let dialog = currentDialog {
                     VStack(alignment: .center, spacing: 4) {
-                        Text(dialog.character)
-                            .bold()
-                            .font(.headline)
-                            .padding(.bottom, 5)
+                        // Only show character name for non-narrator content
+                        if !isNarrationDialog(dialog) {
+                            Text(dialog.character)
+                                .bold()
+                                .font(.headline)
+                                .padding(.bottom, 5)
+                        }
                         
                         dialogBox(for: dialog)
                     }
@@ -125,7 +131,13 @@ struct ReadAlongView: View {
             }
         }
         .onAppear {
+            // Process scenes to ensure they have heading and description dialogs
+            processScenes()
+            
+            // Assign voices to characters and narrator
             assignVoices()
+            
+            // Begin reading
             readCurrentDialog()
         }
     }
@@ -133,25 +145,35 @@ struct ReadAlongView: View {
     @ViewBuilder
     private func dialogBox(for dialog: Scene.Dialog) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            // Split text to handle stage directions
-            ForEach(splitTextForDisplay(dialog.text), id: \.self) { part in
-                if part.hasPrefix("[") && part.hasSuffix("]") {
-                    // This is a stage direction
-                    Text(part)
-                        .italic()
-                        .foregroundColor(.gray)
-                } else {
-                    // Regular dialog text
-                    Text(part)
-                        .foregroundColor(.black)
+            // Check if this is narrator content (scene heading or description)
+            if isNarrationDialog(dialog) {
+                // Render narrator content with different styling
+                Text(dialog.text)
+                    .italic()
+                    .foregroundColor(dialog.text == dialog.text.uppercased() ? .blue : .gray)
+                    .font(dialog.text == dialog.text.uppercased() ? .headline : .body)
+            } else {
+                // Handle character dialog with stage directions
+                ForEach(splitTextForDisplay(dialog.text), id: \.self) { part in
+                    if part.hasPrefix("[") && part.hasSuffix("]") {
+                        // This is a stage direction
+                        Text(part)
+                            .italic()
+                            .foregroundColor(.gray)
+                    } else {
+                        // Regular dialog text
+                        Text(part)
+                            .foregroundColor(.black)
+                    }
                 }
             }
         }
         .padding()
         .background(Color.white)
-        .border(Color.black, width: 1)
+        .border(Color.black, width: isNarrationDialog(dialog) ? 0 : 1)
         .cornerRadius(4)
         .frame(maxWidth: 500)
+        .background(isNarrationDialog(dialog) ? Color.black.opacity(0.05) : Color.white)
     }
     
     private func splitTextForDisplay(_ text: String) -> [String] {
@@ -230,8 +252,22 @@ struct ReadAlongView: View {
         
         guard !availableVoices.isEmpty else { return }
         
-        // Set a random voice for narration
-        narrationVoice = availableVoices.randomElement()
+        // Create a voice selection array we can remove from to avoid duplicates
+        var voicePool = availableVoices
+        
+        // First assign a dedicated voice for narration (scene headings, descriptions)
+        if let index = voicePool.indices.randomElement() {
+            narrationVoice = voicePool[index]
+            voicePool.remove(at: index)
+        }
+        
+        // Store narrator voice in character voices dictionary with special key
+        if let narrationVoice = narrationVoice {
+            characterVoices[narratorName] = narrationVoice
+        }
+        
+        // Ensure we still have voices left
+        guard !voicePool.isEmpty else { return }
         
         // Get unique character names
         var uniqueCharacters = Set<String>()
@@ -241,10 +277,19 @@ struct ReadAlongView: View {
             }
         }
         
-        // Assign random voices to each character
+        // Assign distinct voices to each character 
         for character in uniqueCharacters {
-            if let randomVoice = availableVoices.randomElement() {
-                characterVoices[character] = randomVoice
+            // Skip if this is our narrator identifier
+            if character == narratorName { continue }
+            
+            // Try to get a unique voice from the pool if possible
+            if !voicePool.isEmpty {
+                let index = voicePool.indices.randomElement()!
+                characterVoices[character] = voicePool[index]
+                voicePool.remove(at: index)
+            } else {
+                // If we ran out of voices, pick randomly from the original set
+                characterVoices[character] = availableVoices.randomElement()
             }
         }
     }
@@ -268,11 +313,18 @@ struct ReadAlongView: View {
         // Create utterance with the clean text
         let utterance = AVSpeechUtterance(string: cleanText)
         
-        // Set the voice based on the character
-        if let voice = characterVoices[dialog.character] {
-            utterance.voice = voice
+        // Get the appropriate voice based on content type
+        if isNarrationDialog(dialog) {
+            // Use narrator voice for scene headings and descriptions
+            utterance.voice = characterVoices[narratorName] ?? narrationVoice
         } else {
-            utterance.voice = narrationVoice
+            // Use character-specific voice for dialog
+            if let voice = characterVoices[dialog.character] {
+                utterance.voice = voice
+            } else {
+                // Fallback to narrator voice if character voice not found
+                utterance.voice = narrationVoice
+            }
         }
         
         // Adjust speech properties
@@ -282,6 +334,55 @@ struct ReadAlongView: View {
         
         // Start speaking
         speechSynthesizer.speak(utterance)
+    }
+    
+    // Helper to determine if a dialog should be read by the narrator
+    private func isNarrationDialog(_ dialog: Scene.Dialog) -> Bool {
+        // Scene headings and descriptions should be read by narrator
+        // Check if this is a scene heading or description (not character dialog)
+        return dialog.character == narratorName || 
+               dialog.character == "HEADING" || 
+               dialog.character == "DESCRIPTION" ||
+               dialog.character.contains("SCENE")
+    }
+    
+    // Process scenes to ensure they have heading and description narration
+    private func processScenes() {
+        for (index, scene) in scenes.enumerated() {
+            // Check if scene already has narrator dialog entries
+            let hasNarratorEntries = scene.dialogs.contains { dialog in
+                return dialog.character == narratorName
+            }
+            
+            // If no narrator entries, add them for heading and description
+            if !hasNarratorEntries {
+                // Add scene heading as dialog from narrator if not empty
+                if !scene.heading.isEmpty {
+                    let headingDialog = Scene.Dialog(character: narratorName, text: scene.heading)
+                    
+                    // Insert at beginning of dialog list
+                    if !scene.dialogs.isEmpty {
+                        scene.dialogs.insert(headingDialog, at: 0)
+                    } else {
+                        scene.dialogs.append(headingDialog)
+                    }
+                }
+                
+                // Add scene description as dialog from narrator if not empty
+                if !scene.description.isEmpty {
+                    let descriptionDialog = Scene.Dialog(character: narratorName, text: scene.description)
+                    
+                    // Insert after heading or at beginning if no heading
+                    if scene.dialogs.isEmpty {
+                        scene.dialogs.append(descriptionDialog)
+                    } else if scene.dialogs[0].character == narratorName {
+                        scene.dialogs.insert(descriptionDialog, at: 1)
+                    } else {
+                        scene.dialogs.insert(descriptionDialog, at: 0)
+                    }
+                }
+            }
+        }
     }
     
     private func moveToPrevious() {
