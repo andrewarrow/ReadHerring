@@ -763,27 +763,64 @@ struct VoicesViewWrapper: View {
             }
             .padding(.top)
             
-            Text("Select a voice to use for character readings")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .padding(.bottom)
+            VStack(spacing: 4) {
+                Text("Premium Voice Selection")
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                
+                Text("Choose a high-quality voice for your characters")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.bottom)
             
-            List {
-                ForEach(voices, id: \.identifier) { voice in
-                    VoiceRowView(
-                        voice: voice,
-                        isPlaying: isPlaying == voice.identifier,
-                        sampleText: sampleText,
-                        onPlay: {
-                            playVoice(voice)
-                        }
-                    )
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        selectedVoice = voice
+            if voices.isEmpty {
+                VStack(spacing: 20) {
+                    Image(systemName: "exclamationmark.circle")
+                        .resizable()
+                        .frame(width: 60, height: 60)
+                        .foregroundColor(.orange)
+                    
+                    Text("No Premium Voices Found")
+                        .font(.headline)
+                    
+                    Text("Please download enhanced voices in iOS Settings > Accessibility > Spoken Content > Voices")
+                        .font(.subheadline)
+                        .multilineTextAlignment(.center)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 40)
+                    
+                    Button(action: {
+                        loadAllVoices() // Fallback to all English voices
+                    }) {
+                        Text("Show All Available Voices")
+                            .padding()
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
                     }
-                    .background(selectedVoice?.identifier == voice.identifier ? Color.blue.opacity(0.1) : Color.clear)
+                    .padding(.top, 20)
                 }
+                .padding()
+            } else {
+                List {
+                    ForEach(voices, id: \.identifier) { voice in
+                        VoiceRowView(
+                            voice: voice,
+                            isPlaying: isPlaying == voice.identifier,
+                            sampleText: sampleText,
+                            onPlay: {
+                                playVoice(voice)
+                            }
+                        )
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            selectedVoice = voice
+                        }
+                        .listRowBackground(selectedVoice?.identifier == voice.identifier ? Color.blue.opacity(0.1) : Color.clear)
+                    }
+                }
+                .environment(\.defaultMinListRowHeight, 80) // Give more height to rows for better tapping
             }
             
             Button(action: {
@@ -808,9 +845,43 @@ struct VoicesViewWrapper: View {
     
     private func loadVoices() {
         let allVoices = AVSpeechSynthesisVoice.speechVoices()
+        
+        // Filter to only show English premium/enhanced voices
+        voices = allVoices.filter { voice in
+            // Must be English language
+            guard voice.language.starts(with: "en") else { return false }
+            
+            // Must be enhanced quality or have "premium" in the name
+            return voice.quality == .enhanced || 
+                   voice.name.lowercased().contains("premium") ||
+                   voice.name.lowercased().contains("enhanced")
+        }
+        
+        // Sort by name
+        voices.sort { $0.name < $1.name }
+        
+        print("Loaded \(voices.count) premium English voices")
+        for voice in voices {
+            print("Voice: \(voice.name), ID: \(voice.identifier), Quality: \(voice.quality.rawValue)")
+        }
+    }
+    
+    // Fallback to load all English voices if no premium voices are available
+    private func loadAllVoices() {
+        let allVoices = AVSpeechSynthesisVoice.speechVoices()
+        
+        // Filter to only show English voices
         voices = allVoices.filter { $0.language.starts(with: "en") }
         
-        print("Loaded \(voices.count) English voices")
+        // Sort by quality first, then by name
+        voices.sort { (voice1, voice2) -> Bool in
+            if voice1.quality == voice2.quality {
+                return voice1.name < voice2.name
+            }
+            return voice1.quality.rawValue > voice2.quality.rawValue
+        }
+        
+        print("Loaded \(voices.count) English voices (all qualities)")
         for voice in voices {
             print("Voice: \(voice.name), ID: \(voice.identifier), Quality: \(voice.quality.rawValue)")
         }
@@ -857,6 +928,7 @@ struct VoiceRowView: View {
     
     var body: some View {
         HStack {
+            // Voice information - This part is tappable for selection
             VStack(alignment: .leading) {
                 Text(voice.name)
                     .font(.headline)
@@ -878,12 +950,26 @@ struct VoiceRowView: View {
             
             Spacer()
             
-            Button(action: onPlay) {
-                Image(systemName: isPlaying ? "stop.circle.fill" : "play.circle.fill")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 30, height: 30)
-                    .foregroundColor(isPlaying ? .red : .blue)
+            // Play button in its own tap area
+            ZStack {
+                // Make a larger tap target with background
+                Circle()
+                    .fill(Color.clear)
+                    .frame(width: 60, height: 60)
+                
+                // The actual button
+                Button(action: onPlay) {
+                    Image(systemName: isPlaying ? "stop.circle.fill" : "play.circle.fill")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 36, height: 36)
+                        .foregroundColor(isPlaying ? .red : .blue)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+            .contentShape(Circle()) // Make the entire circle tappable
+            .onTapGesture {
+                onPlay()
             }
         }
         .padding(.vertical, 4)
