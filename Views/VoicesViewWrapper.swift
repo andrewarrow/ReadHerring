@@ -33,7 +33,7 @@ struct VoicesViewWrapper: View {
                 
                 Spacer()
                 
-                Text("Premium Voice Selection")
+                Text("Voices")
                     .font(.title)
                     .fontWeight(.bold)
                 
@@ -45,7 +45,7 @@ struct VoicesViewWrapper: View {
             .padding(.top, 30)
             
             VStack(spacing: 4) {
-                Text("Choose a high-quality voice for your characters")
+                Text("Delete the voices you do not like")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             }
@@ -106,11 +106,7 @@ struct VoicesViewWrapper: View {
                     .onDelete { indexSet in
                         for index in indexSet {
                             let voice = filteredVoices[index]
-                            // First remove from data source
-                            if let voiceIndex = voices.firstIndex(where: { $0.identifier == voice.identifier }) {
-                                voices.remove(at: voiceIndex)
-                            }
-                            // Then add to hidden voices
+                            // Just add to hidden voices - don't modify the main voices array
                             hideVoice(voice)
                         }
                     }
@@ -151,9 +147,9 @@ struct VoicesViewWrapper: View {
         }
     }
     
-    // Return all voices
+    // Return only voices that aren't hidden
     private var filteredVoices: [AVSpeechSynthesisVoice] {
-        return voices
+        return voices.filter { !hiddenVoices.contains($0.identifier) }
     }
     
     private func hideVoice(_ voice: AVSpeechSynthesisVoice) {
@@ -205,8 +201,10 @@ struct VoicesViewWrapper: View {
         voices.sort { $0.name < $1.name }
         
         print("Loaded \(voices.count) premium English voices")
+        print("Hidden voices identifiers: \(hiddenVoices)")
         for voice in voices {
-            print("Voice: \(voice.name), ID: \(voice.identifier), Quality: \(voice.quality.rawValue)")
+            let isHidden = hiddenVoices.contains(voice.identifier) ? " (HIDDEN)" : ""
+            print("Voice: \(voice.name), ID: \(voice.identifier), Quality: \(voice.quality.rawValue)\(isHidden)")
         }
         
         // If no voices found, try loading all voices
@@ -231,8 +229,10 @@ struct VoicesViewWrapper: View {
         }
         
         print("Loaded \(voices.count) English voices (all qualities)")
+        print("Hidden voices count: \(hiddenVoices.count)")
         for voice in voices {
-            print("Voice: \(voice.name), ID: \(voice.identifier), Quality: \(voice.quality.rawValue)")
+            let isHidden = hiddenVoices.contains(voice.identifier) ? " (HIDDEN)" : ""
+            print("Voice: \(voice.name), ID: \(voice.identifier), Quality: \(voice.quality.rawValue)\(isHidden)")
         }
     }
     
