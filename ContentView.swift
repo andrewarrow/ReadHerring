@@ -796,21 +796,28 @@ struct OnboardingView: View {
     
     var body: some View {
         VStack(spacing: 20) {
-            Text("Welcome to ReadHerring")
+            Text("ReadHerring")
                 .font(.largeTitle)
                 .fontWeight(.bold)
                 .padding(.top, 40)
             
-            Text("Before you begin, you need to download voices in iOS Settings")
+            Text("Download voices in iOS Settings")
                 .font(.headline)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
             
-            Text("This allows the app to read text.")
+            Text("Accessibility > Spoken Content >")
                 .font(.subheadline)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
                 .foregroundColor(.secondary)
+
+            Text("Voices > English > Voice")
+                .font(.subheadline)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+                .foregroundColor(.secondary)
+
             
             ScrollView(.horizontal, showsIndicators: true) {
                 Image("voices")
@@ -823,7 +830,7 @@ struct OnboardingView: View {
             .cornerRadius(12)
             .padding(.horizontal)
             
-            Text("Swipe left to right to see all options")
+            Text("Swipe left to right")
                 .font(.caption)
                 .foregroundColor(.secondary)
             
@@ -859,8 +866,8 @@ struct OnboardingView: View {
     }
     
     func openSettings() {
-        if let url = URL(string: UIApplication.openSettingsURLString) {
-            UIApplication.shared.open(url)
+        if let url = URL(string: "App-Prefs:root=ACCESSIBILITY&path=SPEECH") {
+           UIApplication.shared.open(url, options: [:], completionHandler: nil)
         }
     }
 }
