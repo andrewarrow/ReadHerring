@@ -67,7 +67,7 @@ struct CastFilter: Equatable {
     static let genderOptions = ["M", "F", "random"]
 }
 
-// Cast View
+// Cast View 
 struct CastView: View {
     @State private var filter = CastFilter()
     @State private var allImages: [CastImage] = []
@@ -177,7 +177,7 @@ struct CastView: View {
                         VStack(spacing: 16) {
                             ForEach(0..<(filteredImages.count + 1) / 2, id: \.self) { row in
                                 HStack(spacing: 16) {
-                                    ForEach(0..<2) { col in
+                                    ForEach(0..<2, id: \.self) { col in
                                         let index = row * 2 + col
                                         if index < filteredImages.count {
                                             CastImageView(castImage: filteredImages[index])
@@ -239,7 +239,7 @@ struct CastView: View {
                             let imageNames = [
                                 "cast/\(folderName)/image_\(i)",  // With full path (primary format)
                                 "\(folderName)/image_\(i)",        // Just the category folder
-                                "image_\(i)"                      // Direct reference (least likely)
+                                "image_\\(i)"                      // Direct reference (least likely)
                             ]
                             
                             var foundImage = false
@@ -353,6 +353,7 @@ struct CastView: View {
     }
 }
 
+// Filter option view
 struct FilterOptionView: View {
     let title: String
     let options: [String]
@@ -386,6 +387,7 @@ struct FilterOptionView: View {
     }
 }
 
+// Cast Image View
 struct CastImageView: View {
     let castImage: CastImage
     @State private var imageLoaded = false
@@ -726,7 +728,12 @@ struct ContentView: View {
     }
 }
 
-// Wrapper for VoicesView to handle navigation
+// Extension to make AVSpeechSynthesizer accessible globally
+extension AVSpeechSynthesizer {
+    static let shared = AVSpeechSynthesizer()
+}
+
+// Voices View Wrapper
 struct VoicesViewWrapper: View {
     var moveToNextScreen: () -> Void
     @State private var voices: [AVSpeechSynthesisVoice] = []
@@ -928,11 +935,6 @@ struct VoicesViewWrapper: View {
            UIApplication.shared.open(url, options: [:], completionHandler: nil)
         }
     }
-}
-
-// Extension to make AVSpeechSynthesizer accessible globally
-extension AVSpeechSynthesizer {
-    static let shared = AVSpeechSynthesizer()
 }
 
 struct VoiceRowView: View {
