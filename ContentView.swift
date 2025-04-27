@@ -4,6 +4,7 @@ import Vision
 import UniformTypeIdentifiers
 import UIKit
 import Combine
+import AVFoundation
 
 // Model for Cast
 struct CastImage: Identifiable, Hashable {
@@ -567,7 +568,7 @@ struct ContentView: View {
     @State private var isProcessing = false
     @State private var progress: Float = 0.0
     @State private var screenplaySummary: ScreenplaySummary?
-    @State private var activeView: String = "onboarding" // "onboarding", "cast", or "main"
+    @State private var activeView: String = "onboarding" // "onboarding", "voices", "cast", or "main"
     
     var body: some View {
         ZStack {
@@ -575,9 +576,14 @@ struct ContentView: View {
                 OnboardingView(showOnboarding: Binding(
                     get: { true },
                     set: { _ in 
-                        self.activeView = "cast"
+                        self.activeView = "voices"
                     }
                 ))
+                .transition(.opacity)
+            } else if activeView == "voices" {
+                VoicesViewWrapper(moveToNextScreen: {
+                    self.activeView = "cast"
+                })
                 .transition(.opacity)
             } else if activeView == "cast" {
                 CastView(isPresented: Binding(
@@ -717,5 +723,169 @@ struct ContentView: View {
            let rootViewController = windowScene.windows.first?.rootViewController {
             rootViewController.present(activityVC, animated: true)
         }
+    }
+}
+
+// Wrapper for VoicesView to handle navigation
+struct VoicesViewWrapper: View {
+    var moveToNextScreen: () -> Void
+    @State private var voices: [AVSpeechSynthesisVoice] = []
+    @State private var selectedVoice: AVSpeechSynthesisVoice?
+    @State private var isPlaying: String? = nil
+    
+    private let sampleText = "To be or not to be, that is the question."
+    
+    var body: some View {
+        VStack {
+            HStack {
+                Button(action: {
+                    moveToNextScreen()
+                }) {
+                    HStack {
+                        Image(systemName: "arrow.left")
+                        Text("Back")
+                    }
+                    .padding(.horizontal)
+                }
+                
+                Spacer()
+                
+                Text("Voice Selection")
+                    .font(.title)
+                    .fontWeight(.bold)
+                
+                Spacer()
+                
+                // Balance the layout
+                Text("     ")
+                    .padding(.horizontal)
+                    .opacity(0)
+            }
+            .padding(.top)
+            
+            Text("Select a voice to use for character readings")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .padding(.bottom)
+            
+            List {
+                ForEach(voices, id: \.identifier) { voice in
+                    VoiceRowView(
+                        voice: voice,
+                        isPlaying: isPlaying == voice.identifier,
+                        sampleText: sampleText,
+                        onPlay: {
+                            playVoice(voice)
+                        }
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        selectedVoice = voice
+                    }
+                    .background(selectedVoice?.identifier == voice.identifier ? Color.blue.opacity(0.1) : Color.clear)
+                }
+            }
+            
+            Button(action: {
+                // Save selected voice and continue to cast view
+                moveToNextScreen()
+            }) {
+                Text("Continue to Cast Selection")
+                    .frame(minWidth: 200)
+                    .padding()
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+            }
+            .padding(.bottom, 20)
+            .disabled(selectedVoice == nil)
+            .opacity(selectedVoice == nil ? 0.5 : 1.0)
+        }
+        .onAppear {
+            loadVoices()
+        }
+    }
+    
+    private func loadVoices() {
+        let allVoices = AVSpeechSynthesisVoice.speechVoices()
+        voices = allVoices.filter { $0.language.starts(with: "en") }
+        
+        print("Loaded \(voices.count) English voices")
+        for voice in voices {
+            print("Voice: \(voice.name), ID: \(voice.identifier), Quality: \(voice.quality.rawValue)")
+        }
+    }
+    
+    private func playVoice(_ voice: AVSpeechSynthesisVoice) {
+        // Stop any currently playing speech
+        if isPlaying != nil {
+            AVSpeechSynthesizer.shared.stopSpeaking(at: .immediate)
+        }
+        
+        // Set the voice as playing
+        isPlaying = voice.identifier
+        
+        // Create and configure utterance
+        let utterance = AVSpeechUtterance(string: sampleText)
+        utterance.voice = voice
+        utterance.rate = 0.5
+        utterance.pitchMultiplier = 1.0
+        utterance.volume = 1.0
+        
+        // Start speaking
+        AVSpeechSynthesizer.shared.speak(utterance)
+        
+        // Set timer to stop playing status after a few seconds
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+            if self.isPlaying == voice.identifier {
+                self.isPlaying = nil
+            }
+        }
+    }
+}
+
+// Extension to make AVSpeechSynthesizer accessible globally
+extension AVSpeechSynthesizer {
+    static let shared = AVSpeechSynthesizer()
+}
+
+struct VoiceRowView: View {
+    let voice: AVSpeechSynthesisVoice
+    let isPlaying: Bool
+    let sampleText: String
+    let onPlay: () -> Void
+    
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading) {
+                Text(voice.name)
+                    .font(.headline)
+                
+                Text(voice.language)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                
+                if voice.quality == .enhanced {
+                    Text("Premium Voice")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.green.opacity(0.1))
+                        .cornerRadius(4)
+                }
+            }
+            
+            Spacer()
+            
+            Button(action: onPlay) {
+                Image(systemName: isPlaying ? "stop.circle.fill" : "play.circle.fill")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 30, height: 30)
+                    .foregroundColor(isPlaying ? .red : .blue)
+            }
+        }
+        .padding(.vertical, 4)
     }
 }
