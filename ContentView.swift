@@ -269,11 +269,17 @@ struct ContentView: View {
         // Split text into lines for processing
         let lines = text.components(separatedBy: .newlines)
         
-        // Regex patterns
-        let sceneHeadingRegex = try? NSRegularExpression(pattern: "^\\s*(INT\\.|EXT\\.|INT\\/EXT\\.|I\\/E)\\s+(.+?)(?:\\s+-\\s+(.+?))?(?:\\s+([0-9\\.]+\\s+[0-9\\.]+))?\\s*$", options: [])
+        // Regex patterns for scene headings - more inclusive patterns
+        let traditionalSceneRegex = try? NSRegularExpression(pattern: "^\\s*(INT\\.|EXT\\.|INT\\/EXT\\.|I\\/E|INTERIOR|EXTERIOR|INT |EXT )\\s+(.+?)(?:\\s+-\\s+(.+?))?(?:\\s+([0-9\\.]+\\s+[0-9\\.]+))?\\s*$", options: [.caseInsensitive])
+        
+        // Fallback regex for numbered scenes or other formats
+        let numberedSceneRegex = try? NSRegularExpression(pattern: "^\\s*(?:SCENE|SC\\.?)\\s+([0-9]+)\\s*(.*)$", options: [.caseInsensitive])
         
         // For extracting location and time from scene headings
-        let locationTimeRegex = try? NSRegularExpression(pattern: "^(.+?)(?:\\s+-\\s+(.+?))?$", options: [])
+        let locationTimeRegex = try? NSRegularExpression(pattern: "^(.+?)(?:\\s+-\\s+|\\s+|\\s*-\\s*|\\s*,\\s*)([A-Z\\s]+(?:DAY|NIGHT|MORNING|EVENING|DUSK|DAWN|AFTERNOON|CONTINUOUS|LATER))$", options: [])
+        
+        // Time indicators
+        let timeIndicators = ["DAY", "NIGHT", "MORNING", "EVENING", "DUSK", "DAWN", "AFTERNOON", "CONTINUOUS", "LATER", "MOMENTS LATER"]
         
         // State tracking
         var currentSceneIndex = -1
@@ -298,10 +304,111 @@ struct ContentView: View {
                 continue
             }
             
-            // Check if line is a scene heading
-            if let sceneRegex = sceneHeadingRegex,
+            // Various scene heading detection approaches
+            var isSceneHeading = false
+            var sceneHeadingDetails: (fullHeading: String, location: String, timeOfDay: String, sceneNumber: String?) = 
+                (fullHeading: trimmedLine, location: "", timeOfDay: "", sceneNumber: nil)
+            
+            // Approach 1: Traditional scene heading format
+            if let sceneRegex = traditionalSceneRegex,
                let match = sceneRegex.firstMatch(in: trimmedLine, options: [], range: NSRange(location: 0, length: trimmedLine.utf16.count)) {
                 
+                isSceneHeading = true
+                let nsString = trimmedLine as NSString
+                sceneHeadingDetails.fullHeading = nsString.substring(with: match.range)
+                let locAndTime = match.range(at: 2).location != NSNotFound ? nsString.substring(with: match.range(at: 2)) : ""
+                
+                // Extract location and time of day
+                sceneHeadingDetails.location = locAndTime
+                
+                if let locTimeRegex = locationTimeRegex,
+                   let locTimeMatch = locTimeRegex.firstMatch(in: locAndTime, options: [], range: NSRange(location: 0, length: locAndTime.utf16.count)) {
+                    let locTimeNS = locAndTime as NSString
+                    sceneHeadingDetails.location = locTimeMatch.range(at: 1).location != NSNotFound ? locTimeNS.substring(with: locTimeMatch.range(at: 1)) : ""
+                    sceneHeadingDetails.timeOfDay = locTimeMatch.range(at: 2).location != NSNotFound ? locTimeNS.substring(with: locTimeMatch.range(at: 2)) : ""
+                } else {
+                    // Try to extract time indicators manually
+                    for indicator in timeIndicators {
+                        if locAndTime.contains(indicator) {
+                            if let range = locAndTime.range(of: indicator) {
+                                let timeStartIndex = range.lowerBound
+                                sceneHeadingDetails.timeOfDay = String(locAndTime[timeStartIndex...])
+                                sceneHeadingDetails.location = String(locAndTime[..<timeStartIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
+                                break
+                            }
+                        }
+                    }
+                }
+                
+                // Get scene number if present
+                sceneHeadingDetails.sceneNumber = match.range(at: 4).location != NSNotFound ? nsString.substring(with: match.range(at: 4)) : nil
+            }
+            // Approach 2: Numbered scene format
+            else if let numberedRegex = numberedSceneRegex,
+                    let match = numberedRegex.firstMatch(in: trimmedLine, options: [], range: NSRange(location: 0, length: trimmedLine.utf16.count)) {
+                
+                isSceneHeading = true
+                let nsString = trimmedLine as NSString
+                sceneHeadingDetails.fullHeading = nsString.substring(with: match.range)
+                sceneHeadingDetails.sceneNumber = match.range(at: 1).location != NSNotFound ? nsString.substring(with: match.range(at: 1)) : nil
+                let restOfLine = match.range(at: 2).location != NSNotFound ? nsString.substring(with: match.range(at: 2)) : ""
+                
+                // Try to extract location and time
+                sceneHeadingDetails.location = restOfLine
+                
+                for indicator in timeIndicators {
+                    if restOfLine.contains(indicator) {
+                        if let range = restOfLine.range(of: indicator) {
+                            let timeStartIndex = range.lowerBound
+                            sceneHeadingDetails.timeOfDay = String(restOfLine[timeStartIndex...])
+                            sceneHeadingDetails.location = String(restOfLine[..<timeStartIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
+                            break
+                        }
+                    }
+                }
+            }
+            // Approach 3: ALL CAPS line that appears to be a scene heading
+            else if trimmedLine.uppercased() == trimmedLine && trimmedLine.count > 5 && trimmedLine.count < 100 {
+                // Check for scene indicators
+                let hasIntExt = trimmedLine.contains("INT") || trimmedLine.contains("EXT") || 
+                               trimmedLine.contains("INTERIOR") || trimmedLine.contains("EXTERIOR") ||
+                               trimmedLine.contains("I/E") || trimmedLine.contains("INT/EXT")
+                
+                var hasTimeIndicator = false
+                var timeIndicator = ""
+                
+                for indicator in timeIndicators {
+                    if trimmedLine.contains(indicator) {
+                        hasTimeIndicator = true
+                        timeIndicator = indicator
+                        break
+                    }
+                }
+                
+                // Check for typical non-scene heading terms
+                let isNotTransition = !trimmedLine.contains("CUT TO:") && !trimmedLine.contains("FADE") &&
+                                     !trimmedLine.contains("DISSOLVE") && !trimmedLine.contains("SMASH") &&
+                                     !trimmedLine.hasSuffix(":") && !trimmedLine.contains("TO:")
+                
+                if (hasIntExt || hasTimeIndicator) && isNotTransition {
+                    isSceneHeading = true
+                    sceneHeadingDetails.fullHeading = trimmedLine
+                    
+                    // Try to extract location and time
+                    if hasTimeIndicator {
+                        if let range = trimmedLine.range(of: timeIndicator) {
+                            let timeStartIndex = range.lowerBound
+                            sceneHeadingDetails.timeOfDay = String(trimmedLine[timeStartIndex...])
+                            sceneHeadingDetails.location = String(trimmedLine[..<timeStartIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
+                        }
+                    } else {
+                        sceneHeadingDetails.location = trimmedLine
+                    }
+                }
+            }
+            
+            // If we found a scene heading, process it
+            if isSceneHeading {
                 // If we were building a scene, save it
                 if let scene = currentScene {
                     // Trim and clean up scene description
@@ -309,32 +416,13 @@ struct ContentView: View {
                     scenes.append(scene)
                 }
                 
-                // Extract scene components
-                let nsString = trimmedLine as NSString
-                let fullHeading = nsString.substring(with: match.range)
-                let locAndTime = match.range(at: 2).location != NSNotFound ? nsString.substring(with: match.range(at: 2)) : ""
-                
-                // Extract location and time of day
-                var location = locAndTime
-                var timeOfDay = ""
-                
-                if let locTimeRegex = locationTimeRegex,
-                   let locTimeMatch = locTimeRegex.firstMatch(in: locAndTime, options: [], range: NSRange(location: 0, length: locAndTime.utf16.count)) {
-                    let locTimeNS = locAndTime as NSString
-                    location = locTimeMatch.range(at: 1).location != NSNotFound ? locTimeNS.substring(with: locTimeMatch.range(at: 1)) : ""
-                    timeOfDay = locTimeMatch.range(at: 2).location != NSNotFound ? locTimeNS.substring(with: locTimeMatch.range(at: 2)) : ""
-                }
-                
-                // Get scene number if present
-                let sceneNumber = match.range(at: 4).location != NSNotFound ? nsString.substring(with: match.range(at: 4)) : nil
-                
                 // Create new scene
                 currentScene = Scene(
-                    heading: fullHeading,
+                    heading: sceneHeadingDetails.fullHeading,
                     description: "",
-                    location: location,
-                    timeOfDay: timeOfDay,
-                    sceneNumber: sceneNumber
+                    location: sceneHeadingDetails.location,
+                    timeOfDay: sceneHeadingDetails.timeOfDay,
+                    sceneNumber: sceneHeadingDetails.sceneNumber
                 )
                 
                 sceneDescription = ""
@@ -343,22 +431,41 @@ struct ContentView: View {
                 continue
             }
             
-            // Check if line is a character name (all caps, not a transition)
-            if trimmedLine.uppercased() == trimmedLine && !trimmedLine.isEmpty {
-                // Exclude scene headings and transitions
-                let isNotSceneHeading = !trimmedLine.contains("INT.") && !trimmedLine.contains("EXT.")
-                let isNotTransition = !trimmedLine.contains("CUT TO:") && !trimmedLine.contains("FADE TO:")
+            // Check if line is a character name using various detection methods
+            let isAllCaps = trimmedLine.uppercased() == trimmedLine && !trimmedLine.isEmpty
+            let hasParenthetical = trimmedLine.contains("(") && trimmedLine.contains(")")
+            
+            // More general character detection
+            if isAllCaps || (hasParenthetical && trimmedLine.uppercased().contains(trimmedLine.uppercased().replacingOccurrences(of: "\\(.*\\)", with: "", options: .regularExpression))) {
+                // Filter known non-character elements
+                let isNotSceneHeading = !trimmedLine.contains("INT") && !trimmedLine.contains("EXT") && 
+                                      !trimmedLine.contains("INTERIOR") && !trimmedLine.contains("EXTERIOR")
+                let isNotTransition = !trimmedLine.contains("CUT TO") && !trimmedLine.contains("FADE TO") && 
+                                    !trimmedLine.contains("DISSOLVE") && !trimmedLine.hasSuffix(":")
+                let isNotDirection = !trimmedLine.contains("ANGLE ON") && !trimmedLine.contains("CAMERA") &&
+                                   !trimmedLine.contains("POV") && !trimmedLine.contains("TITLE")
                 
-                if isNotSceneHeading && isNotTransition {
-                    // Extract character name (remove parentheticals and (CONT'D))
+                // Character formatting checks
+                let isReasonableLength = trimmedLine.count < 50 // Character names aren't very long
+                let hasReasonableWords = trimmedLine.components(separatedBy: .whitespaces).count <= 4 // Not too many words
+                
+                // Check if followed by potential dialogue
+                let hasDialogueAfter = index + 1 < lines.count && 
+                                       !lines[index + 1].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+                                       lines[index + 1].trimmingCharacters(in: .whitespacesAndNewlines).uppercased() != 
+                                       lines[index + 1].trimmingCharacters(in: .whitespacesAndNewlines)
+                
+                if isNotSceneHeading && isNotTransition && isNotDirection && isReasonableLength && hasReasonableWords && hasDialogueAfter {
+                    // Extract character name (remove parentheticals and modifiers)
                     var characterName = trimmedLine
                     
-                    // Remove parentheticals
-                    if let parenIndex = characterName.firstIndex(of: "(") {
-                        characterName = String(characterName[..<parenIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
-                    }
+                    // Remove parentheticals like (V.O.) or (O.S.)
+                    characterName = characterName.replacingOccurrences(of: "\\(.*?\\)", with: "", options: .regularExpression)
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
                     
-                    // Remove any non-alphabetic suffixes
+                    // Remove any non-alphabetic suffixes and common character modifiers
+                    characterName = characterName.replacingOccurrences(of: "\\s+CONT'D", with: "", options: .regularExpression)
+                    characterName = characterName.replacingOccurrences(of: "\\s+\\(CONT'D\\)", with: "", options: .regularExpression)
                     characterName = characterName.trimmingCharacters(in: CharacterSet.letters.inverted)
                     
                     // Only process if name has substance (length check helps filter false positives)
@@ -384,8 +491,9 @@ struct ContentView: View {
             
             // Process dialogue
             if inDialogue {
-                // Skip parentheticals
-                if trimmedLine.hasPrefix("(") && trimmedLine.hasSuffix(")") {
+                // Skip parentheticals - more flexible matching to catch both standard and variant formats
+                if (trimmedLine.hasPrefix("(") && trimmedLine.hasSuffix(")")) || 
+                   (trimmedLine.contains("(") && trimmedLine.contains(")") && trimmedLine.count < 40) {
                     continue
                 }
                 
@@ -393,10 +501,22 @@ struct ContentView: View {
                 dialogueLines += 1
                 dialogueWords += trimmedLine.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
                 
-                if dialogueLines == 1 && index + 1 < lines.count {
-                    // Check if there's more dialogue or it's a one-liner
+                // Check for end of dialogue with more flexible conditions
+                let isEndOfDialogue = false
+                
+                if index + 1 < lines.count {
                     let nextLine = lines[index + 1].trimmingCharacters(in: .whitespacesAndNewlines)
-                    if nextLine.isEmpty || nextLine.hasPrefix("(") || nextLine.uppercased() == nextLine {
+                    let isNextLineEmpty = nextLine.isEmpty
+                    let isNextLineParenthetical = nextLine.hasPrefix("(") || (nextLine.contains("(") && nextLine.contains(")"))
+                    let isNextLineAllCaps = nextLine.uppercased() == nextLine && !nextLine.isEmpty
+                    let isNextLineSceneHeading = nextLine.contains("INT") || nextLine.contains("EXT") || nextLine.contains("SCENE")
+                    
+                    // More flexible dialogue end detection - end if next line is:
+                    // 1. Empty
+                    // 2. A parenthetical
+                    // 3. ALL CAPS (likely another character or scene heading)
+                    // 4. Clearly a scene heading
+                    if isNextLineEmpty || isNextLineParenthetical || isNextLineAllCaps || isNextLineSceneHeading {
                         // End of dialogue, update character stats
                         if var character = characters[currentCharacter] {
                             character.lineCount += 1
@@ -405,28 +525,14 @@ struct ContentView: View {
                         }
                         inDialogue = false
                     }
-                } else if dialogueLines > 1 {
-                    // Check if this is the end of a multi-line dialogue
-                    if index + 1 < lines.count {
-                        let nextLine = lines[index + 1].trimmingCharacters(in: .whitespacesAndNewlines)
-                        if nextLine.isEmpty || nextLine.hasPrefix("(") || nextLine.uppercased() == nextLine {
-                            // End of dialogue, update character stats
-                            if var character = characters[currentCharacter] {
-                                character.lineCount += 1
-                                character.totalWords += dialogueWords
-                                characters[currentCharacter] = character
-                            }
-                            inDialogue = false
-                        }
-                    } else {
-                        // Last line of the script
-                        if var character = characters[currentCharacter] {
-                            character.lineCount += 1
-                            character.totalWords += dialogueWords
-                            characters[currentCharacter] = character
-                        }
-                        inDialogue = false
+                } else {
+                    // Last line of the script
+                    if var character = characters[currentCharacter] {
+                        character.lineCount += 1
+                        character.totalWords += dialogueWords
+                        characters[currentCharacter] = character
                     }
+                    inDialogue = false
                 }
             } else if currentScene != nil {
                 // Add to current scene description
