@@ -19,7 +19,8 @@
 		001E376B2DBE8DBC00CFB28E /* ScreenplaySummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37622DBE8DBC00CFB28E /* ScreenplaySummaryView.swift */; };
 		001E376C2DBE8DBC00CFB28E /* ScreenplaySummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37592DBE8DBC00CFB28E /* ScreenplaySummary.swift */; };
 		001E376D2DBE8DBC00CFB28E /* Scene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37582DBE8DBC00CFB28E /* Scene.swift */; };
-		001E376E2DBE8DBC00CFB28E /* VoicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37632DBE8DBC00CFB28E /* VoicesView.swift */; };
+		001E376E2DBE8DBC00CFB28E /* Views in Sources */ = {isa = PBXBuildFile; fileRef = 001E37632DBE8DBC00CFB28E /* Views */; };
+		001E376F2DBEA8A200CFB28E /* VoicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E376E2DBEA8A200CFB28E /* VoicesView.swift */; };
 		AA0000000000000000000001 /* ReadHerringApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000011 /* ReadHerringApp.swift */; };
 		AA0000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000012 /* ContentView.swift */; };
 /* End PBXBuildFile section */
@@ -37,7 +38,7 @@
 		001E37602DBE8DBC00CFB28E /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		001E37612DBE8DBC00CFB28E /* ProcessingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessingView.swift; sourceTree = "<group>"; };
 		001E37622DBE8DBC00CFB28E /* ScreenplaySummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenplaySummaryView.swift; sourceTree = "<group>"; };
-		001E37632DBE8DBC00CFB28E /* VoicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicesView.swift; sourceTree = "<group>"; };
+		001E376E2DBEA8A200CFB28E /* VoicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicesView.swift; sourceTree = "<group>"; };
 		AA0000000000000000000010 /* ReadHerring.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ReadHerring.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000011 /* ReadHerringApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadHerringApp.swift; sourceTree = "<group>"; };
 		AA0000000000000000000012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -78,11 +79,11 @@
 		001E37632DBE8DBC00CFB28E /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				001E376E2DBEA8A200CFB28E /* VoicesView.swift */,
 				001E375F2DBE8DBC00CFB28E /* FileSelectionView.swift */,
 				001E37602DBE8DBC00CFB28E /* OnboardingView.swift */,
 				001E37612DBE8DBC00CFB28E /* ProcessingView.swift */,
 				001E37622DBE8DBC00CFB28E /* ScreenplaySummaryView.swift */,
-				001E37632DBE8DBC00CFB28E /* VoicesView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -192,13 +193,14 @@
 				001E37652DBE8DBC00CFB28E /* OnboardingView.swift in Sources */,
 				001E37662DBE8DBC00CFB28E /* Character.swift in Sources */,
 				001E37672DBE8DBC00CFB28E /* ProcessingView.swift in Sources */,
+				001E376F2DBEA8A200CFB28E /* VoicesView.swift in Sources */,
 				001E37682DBE8DBC00CFB28E /* PDFProcessor.swift in Sources */,
 				001E37692DBE8DBC00CFB28E /* DocumentPickerViewController.swift in Sources */,
 				001E376A2DBE8DBC00CFB28E /* ScreenplayParser.swift in Sources */,
 				001E376B2DBE8DBC00CFB28E /* ScreenplaySummaryView.swift in Sources */,
 				001E376C2DBE8DBC00CFB28E /* ScreenplaySummary.swift in Sources */,
 				001E376D2DBE8DBC00CFB28E /* Scene.swift in Sources */,
-				001E376E2DBE8DBC00CFB28E /* VoicesView.swift in Sources */,
+				001E376E2DBE8DBC00CFB28E /* Views in Sources */,
 				AA0000000000000000000001 /* ReadHerringApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

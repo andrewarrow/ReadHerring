@@ -750,7 +750,7 @@ struct VoicesViewWrapper: View {
                 
                 Spacer()
                 
-                Text("Voice Selection")
+                Text("")
                     .font(.title)
                     .fontWeight(.bold)
                 
@@ -761,12 +761,12 @@ struct VoicesViewWrapper: View {
                     .padding(.horizontal)
                     .opacity(0)
             }
-            .padding(.top)
+            .padding(.top, 30)
             
             VStack(spacing: 4) {
                 Text("Premium Voice Selection")
                     .font(.headline)
-                    .foregroundColor(.primary)
+                    .foregroundColor(.primary).padding(.top, 30)
                 
                 Text("Choose a high-quality voice for your characters")
                     .font(.subheadline)
@@ -775,7 +775,9 @@ struct VoicesViewWrapper: View {
             .padding(.bottom)
             
             if voices.isEmpty {
-                VStack(spacing: 20) {
+                Spacer()
+                
+                VStack(spacing: 30) {
                     Image(systemName: "exclamationmark.circle")
                         .resizable()
                         .frame(width: 60, height: 60)
@@ -789,19 +791,24 @@ struct VoicesViewWrapper: View {
                         .multilineTextAlignment(.center)
                         .foregroundColor(.secondary)
                         .padding(.horizontal, 40)
-                    
+                        
                     Button(action: {
-                        loadAllVoices() // Fallback to all English voices
+                        openSettings()
                     }) {
-                        Text("Show All Available Voices")
-                            .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
+                        HStack {
+                            Image(systemName: "gear")
+                            Text("Open Settings")
+                        }
+                        .frame(minWidth: 200)
+                        .padding()
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
                     }
-                    .padding(.top, 20)
                 }
                 .padding()
+                
+                Spacer()
             } else {
                 List {
                     ForEach(voices, id: \.identifier) { voice in
@@ -823,20 +830,22 @@ struct VoicesViewWrapper: View {
                 .environment(\.defaultMinListRowHeight, 80) // Give more height to rows for better tapping
             }
             
-            Button(action: {
-                // Save selected voice and continue to cast view
-                moveToNextScreen()
-            }) {
-                Text("Continue to Cast Selection")
-                    .frame(minWidth: 200)
-                    .padding()
-                    .background(Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
+            if !voices.isEmpty {
+                Button(action: {
+                    // Save selected voice and continue to cast view
+                    moveToNextScreen()
+                }) {
+                    Text("Continue to Cast Selection")
+                        .frame(minWidth: 200)
+                        .padding()
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                }
+                .padding(.bottom, 20)
+                .disabled(selectedVoice == nil)
+                .opacity(selectedVoice == nil ? 0.5 : 1.0)
             }
-            .padding(.bottom, 20)
-            .disabled(selectedVoice == nil)
-            .opacity(selectedVoice == nil ? 0.5 : 1.0)
         }
         .onAppear {
             loadVoices()
@@ -911,6 +920,12 @@ struct VoicesViewWrapper: View {
             if self.isPlaying == voice.identifier {
                 self.isPlaying = nil
             }
+        }
+    }
+    
+    private func openSettings() {
+        if let url = URL(string: "App-Prefs:root=ACCESSIBILITY&path=SPEECH") {
+           UIApplication.shared.open(url, options: [:], completionHandler: nil)
         }
     }
 }
