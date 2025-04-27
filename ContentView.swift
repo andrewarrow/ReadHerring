@@ -40,158 +40,176 @@ struct ContentView: View {
     @State private var isProcessing = false
     @State private var progress: Float = 0.0
     @State private var screenplaySummary: ScreenplaySummary?
+    @State private var showOnboarding = true
     
     var body: some View {
-        VStack {
-            if isProcessing {
+        ZStack {
+            if showOnboarding {
+                OnboardingView(showOnboarding: $showOnboarding)
+            } else {
                 VStack {
-                    Text("Processing PDF...")
-                        .font(.headline)
-                        .padding(.bottom, 8)
-                    
-                    ProgressView(value: progress)
-                        .progressViewStyle(LinearProgressViewStyle())
-                        .frame(height: 20)
-                    
-                    Text("\(Int(progress * 100))%")
-                        .font(.subheadline)
-                        .padding(.top, 8)
-                }
-                .padding()
-            } else if let summary = screenplaySummary {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Screenplay Analysis")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                            .padding(.bottom, 8)
-                        
-                        Group {
-                            Text("Total Scenes: \(summary.sceneCount)")
+                    if isProcessing {
+                        VStack {
+                            Text("Processing PDF...")
                                 .font(.headline)
-                                .padding(.top, 4)
+                                .padding(.bottom, 8)
                             
-                            if !summary.scenes.isEmpty {
-                                Text("Scene Locations:")
-                                    .font(.headline)
-                                    .padding(.top, 4)
+                            ProgressView(value: progress)
+                                .progressViewStyle(LinearProgressViewStyle())
+                                .frame(height: 20)
+                            
+                            Text("\(Int(progress * 100))%")
+                                .font(.subheadline)
+                                .padding(.top, 8)
+                        }
+                        .padding()
+                    } else if let summary = screenplaySummary {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 16) {
+                                Text("Screenplay Analysis")
+                                    .font(.largeTitle)
+                                    .fontWeight(.bold)
+                                    .padding(.bottom, 8)
                                 
-                                ForEach(summary.scenes.prefix(5), id: \.heading) { scene in
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("• \(scene.heading)")
-                                            .font(.body)
-                                            .fontWeight(.semibold)
+                                Group {
+                                    Text("Total Scenes: \(summary.sceneCount)")
+                                        .font(.headline)
+                                        .padding(.top, 4)
+                                    
+                                    if !summary.scenes.isEmpty {
+                                        Text("Scene Locations:")
+                                            .font(.headline)
+                                            .padding(.top, 4)
                                         
-                                        Text("  Location: \(scene.location)")
-                                            .font(.body)
-                                            .foregroundColor(.secondary)
+                                        ForEach(summary.scenes.prefix(5), id: \.heading) { scene in
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text("• \(scene.heading)")
+                                                    .font(.body)
+                                                    .fontWeight(.semibold)
+                                                
+                                                Text("  Location: \(scene.location)")
+                                                    .font(.body)
+                                                    .foregroundColor(.secondary)
+                                                
+                                                Text("  Time: \(scene.timeOfDay)")
+                                                    .font(.body)
+                                                    .foregroundColor(.secondary)
+                                            }
+                                            .padding(.bottom, 4)
+                                        }
                                         
-                                        Text("  Time: \(scene.timeOfDay)")
-                                            .font(.body)
-                                            .foregroundColor(.secondary)
+                                        if summary.sceneCount > 5 {
+                                            Text("...and \(summary.sceneCount - 5) more scenes")
+                                                .font(.subheadline)
+                                                .foregroundColor(.secondary)
+                                                .padding(.top, 2)
+                                        }
                                     }
-                                    .padding(.bottom, 4)
                                 }
                                 
-                                if summary.sceneCount > 5 {
-                                    Text("...and \(summary.sceneCount - 5) more scenes")
-                                        .font(.subheadline)
+                                Divider()
+                                    .padding(.vertical, 8)
+                                
+                                Group {
+                                    Text("Total Characters: \(summary.characterCount)")
+                                        .font(.headline)
+                                        .padding(.top, 4)
+                                    
+                                    if !summary.characters.isEmpty {
+                                        Text("Main Characters:")
+                                            .font(.headline)
+                                            .padding(.top, 4)
+                                        
+                                        let sortedCharacters = summary.characters.values.sorted { 
+                                            $0.lineCount > $1.lineCount 
+                                        }.prefix(10)
+                                        
+                                        ForEach(sortedCharacters, id: \.name) { character in
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text("• \(character.name)")
+                                                    .font(.body)
+                                                    .fontWeight(.semibold)
+                                                
+                                                Text("  \(character.lineCount) lines (\(character.totalWords) words)")
+                                                    .font(.body)
+                                                    .foregroundColor(.secondary)
+                                                
+                                                Text("  First appears in scene \(character.firstAppearance + 1)")
+                                                    .font(.body)
+                                                    .foregroundColor(.secondary)
+                                            }
+                                            .padding(.bottom, 4)
+                                        }
+                                        
+                                        if summary.characterCount > 10 {
+                                            Text("...and \(summary.characterCount - 10) more characters")
+                                                .font(.subheadline)
+                                                .foregroundColor(.secondary)
+                                                .padding(.top, 2)
+                                        }
+                                    }
+                                }
+                                
+                                Divider()
+                                    .padding(.vertical, 8)
+                                    
+                                Group {
+                                    Text("Text Sample:")
+                                        .font(.headline)
+                                        .padding(.top, 4)
+                                    
+                                    Text(summary.rawText.prefix(300) + "...")
+                                        .font(.body)
                                         .foregroundColor(.secondary)
                                         .padding(.top, 2)
-                                }
-                            }
-                        }
-                        
-                        Divider()
-                            .padding(.vertical, 8)
-                        
-                        Group {
-                            Text("Total Characters: \(summary.characterCount)")
-                                .font(.headline)
-                                .padding(.top, 4)
-                            
-                            if !summary.characters.isEmpty {
-                                Text("Main Characters:")
-                                    .font(.headline)
-                                    .padding(.top, 4)
-                                
-                                let sortedCharacters = summary.characters.values.sorted { 
-                                    $0.lineCount > $1.lineCount 
-                                }.prefix(10)
-                                
-                                ForEach(sortedCharacters, id: \.name) { character in
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("• \(character.name)")
-                                            .font(.body)
-                                            .fontWeight(.semibold)
-                                        
-                                        Text("  \(character.lineCount) lines (\(character.totalWords) words)")
-                                            .font(.body)
-                                            .foregroundColor(.secondary)
-                                        
-                                        Text("  First appears in scene \(character.firstAppearance + 1)")
-                                            .font(.body)
-                                            .foregroundColor(.secondary)
+                                    
+                                    Button(action: {
+                                        saveExtractedText(summary.rawText)
+                                    }) {
+                                        Text("Save Extracted Text")
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 8)
+                                            .background(Color.blue)
+                                            .cornerRadius(8)
                                     }
-                                    .padding(.bottom, 4)
-                                }
-                                
-                                if summary.characterCount > 10 {
-                                    Text("...and \(summary.characterCount - 10) more characters")
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                        .padding(.top, 2)
+                                    .padding(.top, 10)
                                 }
                             }
+                            .padding()
                         }
-                        
-                        Divider()
-                            .padding(.vertical, 8)
-                            
-                        Group {
-                            Text("Text Sample:")
-                                .font(.headline)
-                                .padding(.top, 4)
-                            
-                            Text(summary.rawText.prefix(300) + "...")
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                                .padding(.top, 2)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        VStack {
+                            Button("Select PDF") {
+                                let picker = DocumentPickerViewController { url in
+                                    self.selectedURL = url
+                                    self.isProcessing = true
+                                    self.progress = 0.0
+                                    
+                                    Task {
+                                        await processPDF(url: url)
+                                    }
+                                }
+                                
+                                let scenes = UIApplication.shared.connectedScenes
+                                let windowScene = scenes.first as? UIWindowScene
+                                let window = windowScene?.windows.first
+                                window?.rootViewController?.present(picker, animated: true)
+                            }
+                            .padding()
                             
                             Button(action: {
-                                saveExtractedText(summary.rawText)
+                                showOnboarding = true
                             }) {
-                                Text("Save Extracted Text")
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 8)
-                                    .background(Color.blue)
-                                    .cornerRadius(8)
+                                Text("Show Setup Instructions")
+                                    .font(.footnote)
+                                    .foregroundColor(.blue)
                             }
-                            .padding(.top, 10)
+                            .padding(.top, 8)
                         }
                     }
-                    .padding()
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                Button("Select PDF") {
-                    let picker = DocumentPickerViewController { url in
-                        self.selectedURL = url
-                        self.isProcessing = true
-                        self.progress = 0.0
-                        
-                        Task {
-                            await processPDF(url: url)
-                        }
-                    }
-                    
-                    let scenes = UIApplication.shared.connectedScenes
-                    let windowScene = scenes.first as? UIWindowScene
-                    let window = windowScene?.windows.first
-                    window?.rootViewController?.present(picker, animated: true)
-                }
-                .padding()
             }
         }
     }
@@ -769,6 +787,81 @@ struct ContentView: View {
         }
         
         return result
+    }
+}
+
+// MARK: - OnboardingView
+struct OnboardingView: View {
+    @Binding var showOnboarding: Bool
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Welcome to ReadHerring")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+                .padding(.top, 40)
+            
+            Text("Before you begin, you need to download voices in iOS Settings")
+                .font(.headline)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+            
+            Text("This allows the app to read text aloud using high-quality voices")
+                .font(.subheadline)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+                .foregroundColor(.secondary)
+            
+            ScrollView(.horizontal, showsIndicators: true) {
+                Image("voices")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 300)
+                    .padding(.horizontal)
+            }
+            .background(Color(UIColor.systemGray6))
+            .cornerRadius(12)
+            .padding(.horizontal)
+            
+            Text("Swipe left to right to see all options")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            
+            Spacer()
+            
+            Button(action: {
+                openSettings()
+            }) {
+                HStack {
+                    Image(systemName: "gear")
+                    Text("Open Settings")
+                }
+                .frame(minWidth: 200)
+                .padding()
+                .background(Color.blue)
+                .foregroundColor(.white)
+                .cornerRadius(10)
+            }
+            .padding(.bottom, 12)
+            
+            Button(action: {
+                showOnboarding = false
+            }) {
+                Text("Continue to App")
+                    .frame(minWidth: 200)
+                    .padding()
+                    .background(Color.secondary.opacity(0.2))
+                    .foregroundColor(.primary)
+                    .cornerRadius(10)
+            }
+            .padding(.bottom, 40)
+        }
+    }
+    
+    func openSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
     }
 }
 
