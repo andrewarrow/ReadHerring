@@ -62,6 +62,9 @@
 				001E37572DBE8DBC00CFB28E /* Character.swift */,
 				001E37582DBE8DBC00CFB28E /* Scene.swift */,
 				001E37592DBE8DBC00CFB28E /* ScreenplaySummary.swift */,
+				001E37592DBE8DCF00CFB28E /* VoicePreferences.swift */,
+				001E37592DBE8DCF00CFB29E /* CastFilter.swift */,
+				001E37592DBE8DCF00CFB30E /* CastImage.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";

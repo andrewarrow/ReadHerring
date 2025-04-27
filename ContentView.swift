@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 import UIKit
 import Combine
 import AVFoundation
+import Foundation
 
 // Model for Cast
 struct CastImage: Identifiable, Hashable {
@@ -216,7 +217,7 @@ struct CastView: View {
         print("DEBUG: Looking for images in Assets.xcassets/cast")
         
         // Try to load a test image to verify asset catalog is working
-        if let testImage = UIImage(named: "AppIcon") {
+        if UIImage(named: "AppIcon") != nil {
             print("DEBUG: Successfully loaded test image (AppIcon)")
         } else {
             print("DEBUG: Failed to load test image (AppIcon) - asset catalog may not be accessible")
@@ -316,7 +317,7 @@ struct CastView: View {
                 loadedCount += 1
                 
                 // Add a few more variants for each category to show filtering more clearly
-                for i in 1...2 {
+                for _ in 1...2 {
                     images.append(CastImage(
                         imageName: "AppIcon",
                         race: race,
@@ -684,7 +685,7 @@ struct ContentView: View {
                     } else {
                         // Use OCR for this page
                         let pageImage = page.thumbnail(of: CGSize(width: 1024, height: 1024), for: .mediaBox)
-                        if let cgImage = pageImage.cgImage {
+                        if pageImage.cgImage != nil {
                             let ocrText = PDFProcessor.performOCR(on: pageImage)
                             fullText += ocrText + "\n"
                         }
@@ -733,12 +734,14 @@ extension AVSpeechSynthesizer {
     static let shared = AVSpeechSynthesizer()
 }
 
-// Voices View Wrapper
+// Embedded VoicesViewWrapper (inlined to avoid module import issues)
 struct VoicesViewWrapper: View {
     var moveToNextScreen: () -> Void
     @State private var voices: [AVSpeechSynthesisVoice] = []
     @State private var selectedVoice: AVSpeechSynthesisVoice?
     @State private var isPlaying: String? = nil
+    @State private var editMode: EditMode = .inactive
+    @State private var hiddenVoices: [String] = UserDefaults.standard.stringArray(forKey: "hiddenVoices") ?? []
     
     private let sampleText = "To be or not to be, that is the question."
     
@@ -757,24 +760,25 @@ struct VoicesViewWrapper: View {
                 
                 Spacer()
                 
-                Text("")
+                Text("Premium Voice Selection")
                     .font(.title)
                     .fontWeight(.bold)
                 
                 Spacer()
                 
-                // Balance the layout
-                Text("     ")
-                    .padding(.horizontal)
-                    .opacity(0)
+                // Edit button
+                Button(action: {
+                    withAnimation {
+                        editMode = editMode == .active ? .inactive : .active
+                    }
+                }) {
+                    Text(editMode == .active ? "Done" : "Edit")
+                        .padding(.horizontal)
+                }
             }
             .padding(.top, 30)
             
             VStack(spacing: 4) {
-                Text("Premium Voice Selection")
-                    .font(.headline)
-                    .foregroundColor(.primary).padding(.top, 30)
-                
                 Text("Choose a high-quality voice for your characters")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
@@ -818,7 +822,7 @@ struct VoicesViewWrapper: View {
                 Spacer()
             } else {
                 List {
-                    ForEach(voices, id: \.identifier) { voice in
+                    ForEach(filteredVoices, id: \.identifier) { voice in
                         VoiceRowView(
                             voice: voice,
                             isPlaying: isPlaying == voice.identifier,
@@ -829,15 +833,38 @@ struct VoicesViewWrapper: View {
                         )
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            selectedVoice = voice
+                            if editMode == .inactive {
+                                selectedVoice = voice
+                            }
                         }
                         .listRowBackground(selectedVoice?.identifier == voice.identifier ? Color.blue.opacity(0.1) : Color.clear)
+                        .padding(.trailing)
+                        .contextMenu {
+                            Button(action: {
+                                hideVoice(voice)
+                            }) {
+                                Label("Hide Voice", systemImage: "eye.slash")
+                            }
+                        }
                     }
                 }
+                .environment(\.editMode, $editMode)
                 .environment(\.defaultMinListRowHeight, 80) // Give more height to rows for better tapping
             }
             
-            if !voices.isEmpty {
+            if editMode == .inactive && !voices.isEmpty {
+                if hiddenVoices.count > 0 {
+                    Button(action: {
+                        hiddenVoices = []
+                        // Save to UserDefaults
+                        UserDefaults.standard.set(hiddenVoices, forKey: "hiddenVoices")
+                    }) {
+                        Text("Reset Hidden Voices")
+                            .foregroundColor(.blue)
+                            .padding(.vertical, 10)
+                    }
+                }
+                
                 Button(action: {
                     // Save selected voice and continue to cast view
                     moveToNextScreen()
@@ -856,6 +883,40 @@ struct VoicesViewWrapper: View {
         }
         .onAppear {
             loadVoices()
+        }
+    }
+    
+    // Return only voices that aren't hidden
+    private var filteredVoices: [AVSpeechSynthesisVoice] {
+        if editMode == .active {
+            // When in edit mode, show all voices
+            return voices
+        } else {
+            // When not in edit mode, filter out hidden voices
+            return voices.filter { !hiddenVoices.contains($0.identifier) }
+        }
+    }
+    
+    private func hideVoice(_ voice: AVSpeechSynthesisVoice) {
+        // Add to hidden voices if not already present
+        if !hiddenVoices.contains(voice.identifier) {
+            hiddenVoices.append(voice.identifier)
+            // Save to UserDefaults
+            UserDefaults.standard.set(hiddenVoices, forKey: "hiddenVoices")
+        }
+        
+        // If the hidden voice was selected, deselect it
+        if selectedVoice?.identifier == voice.identifier {
+            selectedVoice = nil
+        }
+    }
+    
+    private func unhideVoice(_ voice: AVSpeechSynthesisVoice) {
+        // Remove from hidden voices if present
+        if let index = hiddenVoices.firstIndex(of: voice.identifier) {
+            hiddenVoices.remove(at: index)
+            // Save to UserDefaults
+            UserDefaults.standard.set(hiddenVoices, forKey: "hiddenVoices")
         }
     }
     
@@ -879,6 +940,11 @@ struct VoicesViewWrapper: View {
         print("Loaded \(voices.count) premium English voices")
         for voice in voices {
             print("Voice: \(voice.name), ID: \(voice.identifier), Quality: \(voice.quality.rawValue)")
+        }
+        
+        // If no voices found, try loading all voices
+        if voices.isEmpty {
+            loadAllVoices()
         }
     }
     
@@ -937,6 +1003,7 @@ struct VoicesViewWrapper: View {
     }
 }
 
+// VoiceRowView for displaying voice rows
 struct VoiceRowView: View {
     let voice: AVSpeechSynthesisVoice
     let isPlaying: Bool
