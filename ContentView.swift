@@ -12,8 +12,18 @@ struct ContentView: View {
     var body: some View {
         VStack {
             if isProcessing {
-                ProgressView(value: progress) {
+                VStack {
                     Text("Processing PDF...")
+                        .font(.headline)
+                        .padding(.bottom, 8)
+                    
+                    ProgressView(value: progress)
+                        .progressViewStyle(LinearProgressViewStyle())
+                        .frame(height: 20)
+                    
+                    Text("\(Int(progress * 100))%")
+                        .font(.subheadline)
+                        .padding(.top, 8)
                 }
                 .padding()
             } else if !extractedText.isEmpty {
@@ -84,6 +94,11 @@ struct ContentView: View {
         var fullText = ""
         
         for i in 0..<pageCount {
+            // Update progress at the beginning of each iteration
+            await MainActor.run {
+                progress = Float(i) / Float(pageCount)
+            }
+            
             autoreleasepool {
                 if let page = pdf.page(at: i) {
                     let pageText = page.string ?? ""
@@ -99,11 +114,15 @@ struct ContentView: View {
                         }
                     }
                 }
-                
-                Task { @MainActor in
-                    progress = Float(i + 1) / Float(pageCount)
-                }
             }
+            
+            // Small delay to allow UI updates
+            try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
+        }
+        
+        // Set progress to 100% at the end
+        await MainActor.run {
+            progress = 1.0
         }
         
         await MainActor.run {
