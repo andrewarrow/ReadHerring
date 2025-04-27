@@ -9,8 +9,12 @@ struct VoicesViewWrapper: View {
     @State private var voices: [AVSpeechSynthesisVoice] = []
     @State private var selectedVoice: AVSpeechSynthesisVoice?
     @State private var isPlaying: String? = nil
-    @State private var editMode: EditMode = .inactive
-    @State private var hiddenVoices: [String] = UserDefaults.standard.stringArray(forKey: "hiddenVoices") ?? []
+    @State private var editMode: EditMode = .active
+    @State private var hiddenVoices: [String] = {
+        let hidden = UserDefaults.standard.stringArray(forKey: "hiddenVoices") ?? []
+        print("Loaded \(hidden.count) hidden voices from UserDefaults")
+        return hidden
+    }()
     
     private let sampleText = "To be or not to be, that is the question."
     
@@ -35,15 +39,8 @@ struct VoicesViewWrapper: View {
                 
                 Spacer()
                 
-                // Edit button
-                Button(action: {
-                    withAnimation {
-                        editMode = editMode == .active ? .inactive : .active
-                    }
-                }) {
-                    Text(editMode == .active ? "Done" : "Edit")
-                        .padding(.horizontal)
-                }
+                // Empty spacer to maintain layout
+                Spacer().frame(width: 50)
             }
             .padding(.top, 30)
             
@@ -102,29 +99,30 @@ struct VoicesViewWrapper: View {
                         )
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            if editMode == .inactive {
-                                selectedVoice = voice
-                            }
+                            selectedVoice = voice
                         }
                         .listRowBackground(selectedVoice?.identifier == voice.identifier ? Color.blue.opacity(0.1) : Color.clear)
-                        .swipeActions(edge: .trailing) {
-                            // Implement direct hide/unhide without VoicePreferences
-                            Button(role: .destructive) {
-                                hideVoice(voice)
-                            } label: {
-                                Label("Hide", systemImage: "eye.slash")
+                    }
+                    .onDelete { indexSet in
+                        for index in indexSet {
+                            let voice = filteredVoices[index]
+                            // First remove from data source
+                            if let voiceIndex = voices.firstIndex(where: { $0.identifier == voice.identifier }) {
+                                voices.remove(at: voiceIndex)
                             }
+                            // Then add to hidden voices
+                            hideVoice(voice)
                         }
                     }
                 }
-                .environment(\.editMode, $editMode)
+                .environment(\.editMode, .constant(.active))
                 .environment(\.defaultMinListRowHeight, 80) // Give more height to rows for better tapping
             }
             
-            if editMode == .inactive && !voices.isEmpty {
+            if !voices.isEmpty {
                 if hiddenVoices.count > 0 {
                     Button(action: {
-                        hiddenVoices = []
+                        resetHiddenVoices()
                     }) {
                         Text("Reset Hidden Voices")
                             .foregroundColor(.blue)
@@ -153,23 +151,21 @@ struct VoicesViewWrapper: View {
         }
     }
     
-    // Return only voices that aren't hidden
+    // Return all voices
     private var filteredVoices: [AVSpeechSynthesisVoice] {
-        if editMode == .active {
-            // When in edit mode, show all voices
-            return voices
-        } else {
-            // When not in edit mode, filter out hidden voices
-            return voices.filter { !hiddenVoices.contains($0.identifier) }
-        }
+        return voices
     }
     
     private func hideVoice(_ voice: AVSpeechSynthesisVoice) {
         // Add to hidden voices if not already present
         if !hiddenVoices.contains(voice.identifier) {
             hiddenVoices.append(voice.identifier)
-            // Save to UserDefaults
+            // Save to UserDefaults and synchronize immediately
             UserDefaults.standard.set(hiddenVoices, forKey: "hiddenVoices")
+            UserDefaults.standard.synchronize()
+            
+            print("Voice hidden: \(voice.name), ID: \(voice.identifier)")
+            print("Total hidden voices: \(hiddenVoices.count)")
         }
         
         // If the hidden voice was selected, deselect it
@@ -182,8 +178,12 @@ struct VoicesViewWrapper: View {
         // Remove from hidden voices if present
         if let index = hiddenVoices.firstIndex(of: voice.identifier) {
             hiddenVoices.remove(at: index)
-            // Save to UserDefaults
+            // Save to UserDefaults and synchronize immediately
             UserDefaults.standard.set(hiddenVoices, forKey: "hiddenVoices")
+            UserDefaults.standard.synchronize()
+            
+            print("Voice unhidden: \(voice.name), ID: \(voice.identifier)")
+            print("Total hidden voices: \(hiddenVoices.count)")
         }
     }
     
@@ -267,5 +267,14 @@ struct VoicesViewWrapper: View {
         if let url = URL(string: "App-Prefs:root=ACCESSIBILITY&path=SPEECH") {
            UIApplication.shared.open(url, options: [:], completionHandler: nil)
         }
+    }
+    
+    // Reset hidden voices and ensure the changes are persisted
+    private func resetHiddenVoices() {
+        hiddenVoices = []
+        UserDefaults.standard.set(hiddenVoices, forKey: "hiddenVoices")
+        UserDefaults.standard.synchronize()
+        print("All hidden voices reset!")
+        loadVoices() // Reload all voices
     }
 }
