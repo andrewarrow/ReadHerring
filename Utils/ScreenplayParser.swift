@@ -331,16 +331,7 @@ class ScreenplayParser {
         // Parse dialogs and add them to each scene
         parseDialogsIntoScenes(scenes: scenes, rawText: text)
         
-        // Debug: Add sample dialogs to make sure we have something
-        if !scenes.isEmpty {
-            // Add sample dialog to first scene
-            let firstScene = scenes[0]
-            if firstScene.dialogs.isEmpty {
-                firstScene.addDialog(character: "NARRATOR", text: "This is a sample dialog for testing.")
-                firstScene.addDialog(character: "SARAH", text: "Has anyone seen the demo unit? (horrified) Anyone?")
-                firstScene.addDialog(character: "MIKE", text: "I swear I put it in the conference room last night!")
-            }
-        }
+        // No sample dialogs - only use actual content from the PDF
         
         return ScreenplaySummary(
             sceneCount: scenes.count,

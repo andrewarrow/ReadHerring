@@ -5,6 +5,34 @@ struct ScreenplaySummaryView: View {
     let saveAction: (String) -> Void
     @State private var showingReadAlongView = false
     
+    // Function to get the PDF URL from available locations
+    private func getDefaultPDFURL() -> URL {
+        // Try to get the PDF from multiple locations in this order:
+        // 1. Documents directory (where it might be copied by prepareSamplePDF)
+        // 2. App Bundle
+        // 3. Project directory
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("fade.pdf")
+        let bundleURL = Bundle.main.url(forResource: "fade", withExtension: "pdf")
+        let projectURL = URL(fileURLWithPath: Bundle.main.bundlePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("fade.pdf")
+        
+        if FileManager.default.fileExists(atPath: documentsURL.path) {
+            print("Using PDF from Documents directory")
+            return documentsURL
+        } else if let url = bundleURL {
+            print("Using PDF from app bundle")
+            return url
+        } else if FileManager.default.fileExists(atPath: projectURL.path) {
+            print("Using PDF from project directory")
+            return projectURL
+        } else {
+            // If can't find the PDF anywhere, create a fallback URL
+            print("Warning: Could not find fade.pdf, defaulting to Documents directory path")
+            return documentsURL
+        }
+    }
+    
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -135,7 +163,9 @@ struct ScreenplaySummaryView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .fullScreenCover(isPresented: $showingReadAlongView) {
-            ReadAlongSimpleView(scenes: summary.scenes)
+            // Get the PDF URL and pass it to the view along with scenes
+            let pdfURL = getDefaultPDFURL()
+            ReadAlongView(pdfURL: pdfURL, scenes: summary.scenes)
         }
     }
 }

@@ -167,10 +167,10 @@ struct VoicesViewWrapper: View {
         .onAppear {
             loadVoices()
         }
-        .sheet(isPresented: $showingReadAlongView) {
+        .fullScreenCover(isPresented: $showingReadAlongView) {
             let pdfURL = getPDFURL()
             let scenes = convertPDFToScenes(url: pdfURL)
-            ReadAlongSimpleView(scenes: scenes, pdfURL: pdfURL)
+            ReadAlongView(pdfURL: pdfURL, scenes: scenes)
         }
     }
     
@@ -208,31 +208,130 @@ struct VoicesViewWrapper: View {
         }
     }
     
-    // Convert PDF to scenes (dummy implementation for demo)
+    // Convert PDF to scenes
     private func convertPDFToScenes(url: URL) -> [Scene] {
-        // This would normally parse a PDF to structured scenes
-        // For now, create a simple example screenplay
+        // Try to extract text from the PDF
+        guard let pdf = PDFDocument(url: url) else {
+            print("Failed to load PDF document")
+            return [createErrorScene("Could not load PDF document")]
+        }
         
-        let scene1 = Scene(heading: "STARTUP MELTDOWN", description: "Written by Assistant", location: "", timeOfDay: "")
+        // Extract text from all pages of the PDF
+        var fullText = ""
+        for i in 0..<pdf.pageCount {
+            if let page = pdf.page(at: i) {
+                if let pageText = page.string {
+                    fullText += pageText + "\n"
+                }
+            }
+        }
         
-        let scene2 = Scene(heading: "FADE IN:", description: "", location: "", timeOfDay: "")
+        // If we have text, parse it into a screenplay
+        if !fullText.isEmpty {
+            print("Extracted \(fullText.count) characters of text from PDF")
+            
+            // Parse the text into a screenplay
+            let screenplay = ScreenplayParser.parseScreenplay(text: fullText)
+            
+            // Use the scenes from the screenplay
+            if !screenplay.scenes.isEmpty {
+                print("Extracted \(screenplay.scenes.count) scenes from PDF")
+                return screenplay.scenes
+            } else {
+                print("No scenes found in parsed screenplay")
+            }
+        } else {
+            print("No text extracted from PDF")
+        }
         
-        let scene3 = Scene(heading: "INT. TECH STARTUP OFFICE - MORNING", 
-                         description: "The office is buzzing with nervous energy. Banners reading \"LAUNCH DAY!\" hang everywhere. SARAH (30s, CEO, stressed but trying to appear calm) paces while checking her phone.",
-                         location: "TECH STARTUP OFFICE", 
-                         timeOfDay: "MORNING")
+        // If we didn't extract scenes properly, create manual scenes from the PDF
+        return createManualScenesFromPDF(pdf)
+    }
+    
+    // Create a scene with error information
+    private func createErrorScene(_ message: String) -> Scene {
+        let errorScene = Scene(heading: "ERROR", description: message, location: "", timeOfDay: "")
+        errorScene.addDialog(character: "SYSTEM", text: "Error: \(message)")
+        return errorScene
+    }
+    
+    // Create scenes manually by extracting text from PDF pages
+    private func createManualScenesFromPDF(_ pdf: PDFDocument) -> [Scene] {
+        var scenes: [Scene] = []
         
-        scene3.addDialog(character: "SARAH", text: "Has anyone seen the demo unit? Anyone?")
+        // Create a scene for each page as a fallback method
+        for i in 0..<pdf.pageCount {
+            if let page = pdf.page(at: i) {
+                if let pageText = page.string {
+                    // Create a scene for this page
+                    let scene = Scene(heading: "PAGE \(i+1)", 
+                                    description: pageText.prefix(100) + "...",
+                                    location: "PDF Page \(i+1)", 
+                                    timeOfDay: "")
+                    
+                    // Try to extract dialog from the page text
+                    extractDialogFromText(pageText, scene: scene)
+                    
+                    // Only add the scene if it has content
+                    if !scene.dialogs.isEmpty {
+                        scenes.append(scene)
+                    }
+                }
+            }
+        }
         
-        scene3.addDialog(character: "MIKE", text: "I swear I put it in the conference room last night!")
+        if scenes.isEmpty {
+            // If we couldn't extract anything, add an error scene
+            scenes.append(createErrorScene("Could not extract content from PDF"))
+        }
         
-        scene3.addDialog(character: "JESSICA", text: "Don't worry! I have backup units. Well, they're prototypes from six months ago, but they're basically the same thing, right?")
+        return scenes
+    }
+    
+    // Extract dialog from raw text
+    private func extractDialogFromText(_ text: String, scene: Scene) {
+        let lines = text.components(separatedBy: .newlines)
+        var currentCharacter = ""
+        var dialogLines: [String] = []
         
-        scene3.addDialog(character: "SARAH", text: "(horrified) The ones that catch fire?")
+        for line in lines {
+            let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            // Skip empty lines
+            if trimmedLine.isEmpty {
+                if !currentCharacter.isEmpty && !dialogLines.isEmpty {
+                    // End of dialog, add it to the scene
+                    let dialogText = dialogLines.joined(separator: " ")
+                    scene.addDialog(character: currentCharacter, text: dialogText)
+                    dialogLines = []
+                    currentCharacter = ""
+                }
+                continue
+            }
+            
+            // Check if this is a potential character name (ALL CAPS, not too long)
+            if trimmedLine.uppercased() == trimmedLine && trimmedLine.count > 1 && trimmedLine.count < 50 {
+                // End previous dialog if any
+                if !currentCharacter.isEmpty && !dialogLines.isEmpty {
+                    let dialogText = dialogLines.joined(separator: " ")
+                    scene.addDialog(character: currentCharacter, text: dialogText)
+                    dialogLines = []
+                }
+                
+                // Set as current character
+                currentCharacter = trimmedLine
+            } 
+            // If we have a character and this isn't a new character name, add to dialog
+            else if !currentCharacter.isEmpty {
+                dialogLines.append(trimmedLine)
+            }
+        }
         
-        scene3.addDialog(character: "DAVID", text: "Speaking of fire, our insurance company just called. Apparently, they're concerned about our \"history of combustible presentations.\"")
-        
-        return [scene1, scene2, scene3]
+        // Add any final dialog
+        if !currentCharacter.isEmpty && !dialogLines.isEmpty {
+            let dialogText = dialogLines.joined(separator: " ")
+            scene.addDialog(character: currentCharacter, text: dialogText)
+        }
     }
     
     // Return only voices that aren't hidden
