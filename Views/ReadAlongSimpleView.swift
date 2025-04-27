@@ -1,8 +1,10 @@
 import SwiftUI
 import AVFoundation
+import PDFKit
 
 struct ReadAlongSimpleView: View {
     let scenes: [Scene]
+    var pdfURL: URL? = nil
     
     @State private var currentSceneIndex: Int = 0
     @State private var currentDialogIndex: Int = 0
@@ -43,82 +45,115 @@ struct ReadAlongSimpleView: View {
     }
     
     var body: some View {
-        // Ultra-minimal UI to avoid Metal framework issues
-        VStack {
-            // Close button at top
-            HStack {
-                Button("Close") {
-                    presentationMode.wrappedValue.dismiss()
-                }
-                .padding()
-                
-                Spacer()
-                
-                Text("Read Along")
-                    .bold()
-                
-                Spacer()
+        ZStack {
+            // PDF view in the background
+            if let url = pdfURL {
+                SimpleReadAlongPDFWrapper(pdfURL: url)
+                    .edgesIgnoringSafeArea(.all)
             }
             
-            Spacer().frame(height: 20)
-            
-            // Prev/Next buttons
-            HStack {
-                Button("← Prev") {
-                    moveToPrevious()
-                }
-                .disabled(!hasPrevious)
-                .padding()
-                
-                Spacer()
-                
-                Button("Next →") {
-                    moveToNext()
-                }
-                .disabled(!hasNext)
-                .padding()
-            }
-            
-            Spacer().frame(height: 20)
-            
-            // Character name and dialog text
-            if let dialog = currentDialog {
-                Text(dialog.character)
-                    .bold()
-                    .font(.title2)
-                    .padding(.bottom, 5)
-                
-                VStack(alignment: .leading) {
-                    // Split text to handle stage directions
-                    ForEach(splitTextForDisplay(dialog.text), id: \.self) { part in
-                        if part.hasPrefix("[") && part.hasSuffix("]") {
-                            // This is a stage direction
-                            Text(part)
-                                .italic()
-                                .foregroundColor(.gray)
-                        } else {
-                            // Regular dialog text
-                            Text(part)
-                        }
+            // Transparent overlay with dialog boxes
+            VStack {
+                // Close button at top
+                HStack {
+                    Button("← Back") {
+                        presentationMode.wrappedValue.dismiss()
                     }
+                    .padding()
+                    .foregroundColor(.blue)
+                    
+                    Spacer()
+                    
+                    Text("Read Along")
+                        .bold()
+                    
+                    Spacer()
+                }
+                .background(Color.black.opacity(0.3))
+                .foregroundColor(.white)
+                
+                Spacer()
+                
+                // Prev/Next buttons
+                HStack {
+                    Button("← Prev") {
+                        moveToPrevious()
+                    }
+                    .disabled(!hasPrevious)
+                    .padding()
+                    .foregroundColor(.blue)
+                    .background(Color.white.opacity(0.8))
+                    .cornerRadius(8)
+                    
+                    Spacer()
+                    
+                    Button("Next →") {
+                        moveToNext()
+                    }
+                    .disabled(!hasNext)
+                    .padding()
+                    .foregroundColor(.blue)
+                    .background(Color.white.opacity(0.8))
+                    .cornerRadius(8)
                 }
                 .padding()
-            } else {
-                Text("No dialog available")
-                    .italic()
+                
+                // Character name and dialog text
+                if let dialog = currentDialog {
+                    VStack(alignment: .center, spacing: 4) {
+                        Text(dialog.character)
+                            .bold()
+                            .font(.headline)
+                            .padding(.bottom, 5)
+                        
+                        dialogBox(for: dialog)
+                    }
                     .padding()
+                } else {
+                    Text("No dialog available")
+                        .italic()
+                        .padding()
+                        .background(Color.white.opacity(0.8))
+                        .cornerRadius(8)
+                }
+                
+                // Scene counter
+                Text("Scene \(currentSceneIndex+1) of \(scenes.count)")
+                    .padding()
+                    .background(Color.black.opacity(0.3))
+                    .foregroundColor(.white)
+                    .cornerRadius(4)
+                    .padding(.bottom)
             }
-            
-            Spacer()
-            
-            // Scene counter
-            Text("Scene \(currentSceneIndex+1) of \(scenes.count)")
-                .padding()
         }
         .onAppear {
             assignVoices()
             readCurrentDialog()
         }
+    }
+    
+    @ViewBuilder
+    private func dialogBox(for dialog: Scene.Dialog) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // Split text to handle stage directions
+            ForEach(splitTextForDisplay(dialog.text), id: \.self) { part in
+                if part.hasPrefix("[") && part.hasSuffix("]") {
+                    // This is a stage direction
+                    Text(part)
+                        .italic()
+                        .foregroundColor(.gray)
+                } else {
+                    // Regular dialog text
+                    Text(part)
+                        .foregroundColor(.black)
+                }
+            }
+        }
+        .padding()
+        .background(Color.white)
+        .border(Color.black, width: 1)
+        .cornerRadius(4)
+        .frame(maxWidth: 500)
     }
     
     private func splitTextForDisplay(_ text: String) -> [String] {
@@ -168,7 +203,33 @@ struct ReadAlongSimpleView: View {
     }
     
     private func assignVoices() {
-        let availableVoices = AVSpeechSynthesisVoice.speechVoices()
+        // Get all available voices
+        let allVoices = AVSpeechSynthesisVoice.speechVoices()
+        
+        // Get the list of hidden voice IDs from VoicePreferences
+        let hiddenVoices = VoicePreferences.shared.getHiddenVoices()
+        
+        // Filter to only enhanced/premium voices that aren't hidden
+        let availablePremiumVoices = allVoices.filter { voice in
+            // Filter out hidden voices
+            guard !hiddenVoices.contains(voice.identifier) else { return false }
+            
+            // Must be English language
+            guard voice.language.starts(with: "en") else { return false }
+            
+            // Must be enhanced quality or have "premium" in the name
+            return voice.quality == .enhanced || 
+                   voice.name.lowercased().contains("premium") ||
+                   voice.name.lowercased().contains("enhanced")
+        }
+        
+        // Use all English voices if no premium voices are available
+        let availableVoices = availablePremiumVoices.isEmpty ? 
+            allVoices.filter { voice in 
+                !hiddenVoices.contains(voice.identifier) && 
+                voice.language.starts(with: "en")
+            } : availablePremiumVoices
+        
         guard !availableVoices.isEmpty else { return }
         
         // Set a random voice for narration
@@ -250,13 +311,58 @@ struct ReadAlongSimpleView: View {
     }
 }
 
+// Simple PDF view wrapper for the simplified read along view
+struct SimpleReadAlongPDFWrapper: UIViewRepresentable {
+    let pdfURL: URL
+    
+    func makeUIView(context: Context) -> PDFView {
+        let pdfView = PDFView()
+        pdfView.displayMode = .singlePage
+        pdfView.displayDirection = .vertical
+        pdfView.autoScales = true
+        pdfView.usePageViewController(true)
+        pdfView.pageBreakMargins = UIEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+        
+        // Enable scrolling with gestures
+        pdfView.isUserInteractionEnabled = true
+        
+        // Load PDF document
+        if let document = PDFDocument(url: pdfURL) {
+            pdfView.document = document
+            // Go to first page
+            if let firstPage = document.page(at: 0) {
+                pdfView.go(to: firstPage)
+            }
+        }
+        
+        return pdfView
+    }
+    
+    func updateUIView(_ uiView: PDFView, context: Context) {
+        // Update PDF if URL changes
+        if let document = PDFDocument(url: pdfURL) {
+            uiView.document = document
+        }
+    }
+}
+
 struct ReadAlongSimpleView_Previews: PreviewProvider {
     static var previews: some View {
         // Create sample data
-        let scene = Scene(heading: "INT. OFFICE - DAY", description: "The office is busy.", location: "OFFICE", timeOfDay: "DAY")
-        scene.addDialog(character: "SARAH", text: "Has anyone seen the demo unit? (horrified) Anyone?")
-        scene.addDialog(character: "MIKE", text: "I swear I put it in the conference room last night!")
+        let scene1 = Scene(heading: "STARTUP MELTDOWN", description: "Written by Assistant", location: "", timeOfDay: "")
         
-        return ReadAlongSimpleView(scenes: [scene])
+        let scene2 = Scene(heading: "INT. TECH STARTUP OFFICE - MORNING", 
+                         description: "The office is buzzing with nervous energy.",
+                         location: "TECH STARTUP OFFICE", 
+                         timeOfDay: "MORNING")
+        
+        scene2.addDialog(character: "SARAH", text: "Has anyone seen the demo unit? (horrified) Anyone?")
+        scene2.addDialog(character: "MIKE", text: "I swear I put it in the conference room last night!")
+        
+        // Create URL to sample PDF
+        let samplePDFURL = Bundle.main.url(forResource: "fade", withExtension: "pdf") ?? 
+                          URL(fileURLWithPath: "/Users/aa/os/ReadHerring/fade.pdf")
+        
+        return ReadAlongSimpleView(scenes: [scene1, scene2], pdfURL: samplePDFURL)
     }
 }

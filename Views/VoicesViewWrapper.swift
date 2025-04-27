@@ -168,8 +168,9 @@ struct VoicesViewWrapper: View {
             loadVoices()
         }
         .sheet(isPresented: $showingReadAlongView) {
-            // Use a constant PDF URL to avoid ViewBuilder errors
-            ReadAlongView(pdfURL: getPDFURL())
+            let pdfURL = getPDFURL()
+            let scenes = convertPDFToScenes(url: pdfURL)
+            ReadAlongSimpleView(scenes: scenes, pdfURL: pdfURL)
         }
     }
     
@@ -205,6 +206,33 @@ struct VoicesViewWrapper: View {
             print("Warning: Could not find fade.pdf, defaulting to Documents directory path")
             return documentsURL
         }
+    }
+    
+    // Convert PDF to scenes (dummy implementation for demo)
+    private func convertPDFToScenes(url: URL) -> [Scene] {
+        // This would normally parse a PDF to structured scenes
+        // For now, create a simple example screenplay
+        
+        let scene1 = Scene(heading: "STARTUP MELTDOWN", description: "Written by Assistant", location: "", timeOfDay: "")
+        
+        let scene2 = Scene(heading: "FADE IN:", description: "", location: "", timeOfDay: "")
+        
+        let scene3 = Scene(heading: "INT. TECH STARTUP OFFICE - MORNING", 
+                         description: "The office is buzzing with nervous energy. Banners reading \"LAUNCH DAY!\" hang everywhere. SARAH (30s, CEO, stressed but trying to appear calm) paces while checking her phone.",
+                         location: "TECH STARTUP OFFICE", 
+                         timeOfDay: "MORNING")
+        
+        scene3.addDialog(character: "SARAH", text: "Has anyone seen the demo unit? Anyone?")
+        
+        scene3.addDialog(character: "MIKE", text: "I swear I put it in the conference room last night!")
+        
+        scene3.addDialog(character: "JESSICA", text: "Don't worry! I have backup units. Well, they're prototypes from six months ago, but they're basically the same thing, right?")
+        
+        scene3.addDialog(character: "SARAH", text: "(horrified) The ones that catch fire?")
+        
+        scene3.addDialog(character: "DAVID", text: "Speaking of fire, our insurance company just called. Apparently, they're concerned about our \"history of combustible presentations.\"")
+        
+        return [scene1, scene2, scene3]
     }
     
     // Return only voices that aren't hidden
