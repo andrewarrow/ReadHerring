@@ -3,6 +3,7 @@ import UIKit
 
 struct OnboardingView: View {
     @Binding var showOnboarding: Bool
+    @State private var navigateToCast = false
     
     var body: some View {
         VStack(spacing: 20) {
@@ -63,6 +64,7 @@ struct OnboardingView: View {
             
             Button(action: {
                 showOnboarding = false
+                navigateToCast = true
             }) {
                 Text("Continue to App")
                     .frame(minWidth: 200)
@@ -73,6 +75,8 @@ struct OnboardingView: View {
             }
             .padding(.bottom, 40)
         }
+        .onAppear()
+            // Simply set showOnboarding to false directly in the button action
     }
     
     func openSettings() {
