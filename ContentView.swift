@@ -33,6 +33,11 @@ struct ContentView: View {
     // Properties and methods moved to CastImage.swift
     // Properties moved to CastFilter.swift
     
+    init() {
+        // Ensure default PDF is copied to Documents directory
+        prepareSamplePDF()
+    }
+    
     var body: some View {
         ZStack {
             if activeView == "onboarding" {
@@ -185,6 +190,44 @@ struct ContentView: View {
         if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
            let rootViewController = windowScene.windows.first?.rootViewController {
             rootViewController.present(activityVC, animated: true)
+        }
+    }
+}
+
+// Extension for ContentView to ensure sample PDF is available
+extension ContentView {
+    private func prepareSamplePDF() {
+        let fileManager = FileManager.default
+        let documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let destinationURL = documentsDirectory.appendingPathComponent("fade.pdf")
+        
+        // Only copy if the file doesn't exist in Documents directory
+        if !fileManager.fileExists(atPath: destinationURL.path) {
+            // Try to copy from bundle
+            if let bundleURL = Bundle.main.url(forResource: "fade", withExtension: "pdf") {
+                do {
+                    try fileManager.copyItem(at: bundleURL, to: destinationURL)
+                    print("Copied sample PDF to Documents directory: \(destinationURL.path)")
+                } catch {
+                    print("Failed to copy sample PDF: \(error.localizedDescription)")
+                    
+                    // Attempt to copy from the app directory where fade.pdf may be located
+                    let appDirectoryURL = URL(fileURLWithPath: Bundle.main.bundlePath)
+                        .deletingLastPathComponent()
+                        .appendingPathComponent("fade.pdf")
+                    
+                    if fileManager.fileExists(atPath: appDirectoryURL.path) {
+                        do {
+                            try fileManager.copyItem(at: appDirectoryURL, to: destinationURL)
+                            print("Copied sample PDF from app directory: \(destinationURL.path)")
+                        } catch {
+                            print("Failed to copy sample PDF from app directory: \(error.localizedDescription)")
+                        }
+                    }
+                }
+            } else {
+                print("Sample PDF not found in bundle")
+            }
         }
     }
 }

@@ -2,6 +2,7 @@ import SwiftUI
 import AVFoundation
 import Foundation
 import UIKit // Keep UIKit for openSettings
+import PDFKit
 
 // Voices View Wrapper
 struct VoicesViewWrapper: View {
@@ -15,6 +16,7 @@ struct VoicesViewWrapper: View {
         print("Loaded \(hidden.count) hidden voices from UserDefaults")
         return hidden
     }()
+    @State private var showingReadAlongView = false
     
     private let sampleText = "To be or not to be, that is the question."
     
@@ -148,10 +150,10 @@ struct VoicesViewWrapper: View {
                 }
                 
                 Button(action: {
-                    // Save selected voice and continue to cast view
-                    moveToNextScreen()
+                    // Save selected voice and continue to ReadAlong view
+                    navigateToReadAlongView()
                 }) {
-                    Text("Continue to Cast Selection")
+                    Text("Ready to Read")
                         .frame(minWidth: 200)
                         .padding()
                         .background(Color.blue)
@@ -159,12 +161,49 @@ struct VoicesViewWrapper: View {
                         .cornerRadius(10)
                 }
                 .padding(.bottom, 20)
-                .disabled(selectedVoice == nil)
-                .opacity(selectedVoice == nil ? 0.5 : 1.0)
+                .disabled(false) // Remove the disabled state so user can proceed after deleting unwanted voices
             }
         }
         .onAppear {
             loadVoices()
+        }
+        .sheet(isPresented: $showingReadAlongView) {
+            // Use a constant PDF URL to avoid ViewBuilder errors
+            ReadAlongView(pdfURL: getPDFURL())
+        }
+    }
+    
+    // Navigate to the ReadAlong view
+    private func navigateToReadAlongView() {
+        // Show the ReadAlong view as a sheet
+        showingReadAlongView = true
+    }
+    
+    // Function to get the PDF URL from available locations
+    private func getPDFURL() -> URL {
+        // Try to get the PDF from multiple locations in this order:
+        // 1. Documents directory (where it might be copied by prepareSamplePDF)
+        // 2. App Bundle
+        // 3. Project directory
+        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("fade.pdf")
+        let bundleURL = Bundle.main.url(forResource: "fade", withExtension: "pdf")
+        let projectURL = URL(fileURLWithPath: Bundle.main.bundlePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("fade.pdf")
+        
+        if FileManager.default.fileExists(atPath: documentsURL.path) {
+            print("Using PDF from Documents directory")
+            return documentsURL
+        } else if let url = bundleURL {
+            print("Using PDF from app bundle")
+            return url
+        } else if FileManager.default.fileExists(atPath: projectURL.path) {
+            print("Using PDF from project directory")
+            return projectURL
+        } else {
+            // If can't find the PDF anywhere, create a fallback URL
+            print("Warning: Could not find fade.pdf, defaulting to Documents directory path")
+            return documentsURL
         }
     }
     
