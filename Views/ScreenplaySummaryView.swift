@@ -3,6 +3,7 @@ import SwiftUI
 struct ScreenplaySummaryView: View {
     let summary: ScreenplaySummary
     let saveAction: (String) -> Void
+    @State private var showingReadAlongView = false
     
     var body: some View {
         ScrollView {
@@ -104,15 +105,28 @@ struct ScreenplaySummaryView: View {
                         .foregroundColor(.secondary)
                         .padding(.top, 2)
                     
-                    Button(action: {
-                        saveAction(summary.rawText)
-                    }) {
-                        Text("Save Extracted Text")
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(Color.blue)
-                            .cornerRadius(8)
+                    HStack {
+                        Button(action: {
+                            saveAction(summary.rawText)
+                        }) {
+                            Text("Save Extracted Text")
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(Color.blue)
+                                .cornerRadius(8)
+                        }
+                        
+                        Button(action: {
+                            showingReadAlongView = true
+                        }) {
+                            Text("Read Along")
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(Color.green)
+                                .cornerRadius(8)
+                        }
                     }
                     .padding(.top, 10)
                 }
@@ -120,5 +134,8 @@ struct ScreenplaySummaryView: View {
             .padding()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .fullScreenCover(isPresented: $showingReadAlongView) {
+            ReadAlongNavigationView(scenes: summary.scenes)
+        }
     }
 }

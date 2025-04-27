@@ -1,6 +1,7 @@
 import Foundation
 
 class ScreenplayParser {
+    
     static func parseScreenplay(text: String) -> ScreenplaySummary {
         // Split text into lines for processing
         let lines = text.components(separatedBy: .newlines)
@@ -327,6 +328,9 @@ class ScreenplayParser {
             scenes.append(scene)
         }
         
+        // Parse dialogs and add them to each scene
+        parseDialogsIntoScenes(scenes: scenes, rawText: text)
+        
         return ScreenplaySummary(
             sceneCount: scenes.count,
             scenes: scenes,
@@ -334,5 +338,106 @@ class ScreenplayParser {
             characters: characters,
             rawText: text
         )
+    }
+    
+    // Helper method to check if a line is a scene heading
+    private static func checkIfSceneHeading(_ line: String) -> Bool {
+        let patterns = ["^INT\\.", "^EXT\\.", "^INT/EXT\\.", "^I/E\\.", "^INTERIOR", "^EXTERIOR"]
+        for pattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                let range = NSRange(location: 0, length: line.utf16.count)
+                if regex.firstMatch(in: line, options: [], range: range) != nil {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+    
+    // Parse screenplay into dialogs and assign them to appropriate scenes
+    private static func parseDialogsIntoScenes(scenes: [Scene], rawText: String) {
+        let lines = rawText.components(separatedBy: .newlines)
+        var currentSceneIndex = 0
+        var currentCharacter = ""
+        var collectingDialog = false
+        var dialogLines = [String]()
+        
+        for line in lines {
+            let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            // Skip empty lines
+            if trimmedLine.isEmpty {
+                if collectingDialog && !dialogLines.isEmpty {
+                    // End of dialog block
+                    let dialogText = dialogLines.joined(separator: " ")
+                    if currentSceneIndex < scenes.count && !currentCharacter.isEmpty {
+                        scenes[currentSceneIndex].addDialog(character: currentCharacter, text: dialogText)
+                    }
+                    collectingDialog = false
+                    dialogLines = []
+                    currentCharacter = ""
+                }
+                continue
+            }
+            
+            // Check if this is a scene heading
+            if checkIfSceneHeading(trimmedLine) {
+                // End any ongoing dialog collection
+                if collectingDialog && !dialogLines.isEmpty {
+                    let dialogText = dialogLines.joined(separator: " ")
+                    if currentSceneIndex < scenes.count && !currentCharacter.isEmpty {
+                        scenes[currentSceneIndex].addDialog(character: currentCharacter, text: dialogText)
+                    }
+                    collectingDialog = false
+                    dialogLines = []
+                    currentCharacter = ""
+                }
+                
+                // Find matching scene
+                if let index = scenes.firstIndex(where: { $0.heading.contains(trimmedLine) }) {
+                    currentSceneIndex = index
+                }
+                continue
+            }
+            
+            // Check if this is a character name (ALL CAPS)
+            let characterRegex = try? NSRegularExpression(pattern: "^[A-Z][A-Z\\s\\-'().]+$")
+            let isAllCaps = characterRegex?.firstMatch(in: trimmedLine, options: [], range: NSRange(location: 0, length: trimmedLine.utf16.count)) != nil
+            
+            if isAllCaps && !trimmedLine.contains("INT.") && !trimmedLine.contains("EXT.") {
+                // End any ongoing dialog collection
+                if collectingDialog && !dialogLines.isEmpty {
+                    let dialogText = dialogLines.joined(separator: " ")
+                    if currentSceneIndex < scenes.count && !currentCharacter.isEmpty {
+                        scenes[currentSceneIndex].addDialog(character: currentCharacter, text: dialogText)
+                    }
+                }
+                
+                // Clean character name (remove parentheticals)
+                var cleanName = trimmedLine
+                if let range = trimmedLine.range(of: "\\(.*?\\)", options: .regularExpression) {
+                    cleanName = String(trimmedLine[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                
+                // Start new dialog collection
+                currentCharacter = cleanName
+                collectingDialog = true
+                dialogLines = []
+                continue
+            }
+            
+            // If we're collecting dialog, add this line
+            if collectingDialog {
+                dialogLines.append(trimmedLine)
+            }
+        }
+        
+        // Add any final dialog
+        if collectingDialog && !dialogLines.isEmpty {
+            let dialogText = dialogLines.joined(separator: " ")
+            if currentSceneIndex < scenes.count && !currentCharacter.isEmpty {
+                scenes[currentSceneIndex].addDialog(character: currentCharacter, text: dialogText)
+            }
+        }
     }
 }

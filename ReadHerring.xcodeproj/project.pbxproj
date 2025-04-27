@@ -32,6 +32,8 @@
 		001E37812DBED47400CFB28E /* DocumentPickerDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37802DBED47400CFB28E /* DocumentPickerDelegate.swift */; };
 		001E37852DBEDE6500CFB28E /* ReadAlongView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37842DBEDE6500CFB28E /* ReadAlongView.swift */; };
 		001E37872DBEDF1600CFB28E /* fade.pdf in Resources */ = {isa = PBXBuildFile; fileRef = 001E37862DBEDF1600CFB28E /* fade.pdf */; };
+		001E378A2DBEE86900CFB28E /* ReadAlongNavigationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37882DBEE86900CFB28E /* ReadAlongNavigationView.swift */; };
+		001E378B2DBEE86900CFB28E /* ReadAlongUpdatedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37892DBEE86900CFB28E /* ReadAlongUpdatedView.swift */; };
 		AA0000000000000000000001 /* ReadHerringApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000011 /* ReadHerringApp.swift */; };
 		AA0000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000012 /* ContentView.swift */; };
 /* End PBXBuildFile section */
@@ -61,6 +63,8 @@
 		001E37802DBED47400CFB28E /* DocumentPickerDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentPickerDelegate.swift; sourceTree = "<group>"; };
 		001E37842DBEDE6500CFB28E /* ReadAlongView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadAlongView.swift; sourceTree = "<group>"; };
 		001E37862DBEDF1600CFB28E /* fade.pdf */ = {isa = PBXFileReference; lastKnownFileType = image.pdf; path = fade.pdf; sourceTree = "<group>"; };
+		001E37882DBEE86900CFB28E /* ReadAlongNavigationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadAlongNavigationView.swift; sourceTree = "<group>"; };
+		001E37892DBEE86900CFB28E /* ReadAlongUpdatedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadAlongUpdatedView.swift; sourceTree = "<group>"; };
 		AA0000000000000000000010 /* ReadHerring.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ReadHerring.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000011 /* ReadHerringApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadHerringApp.swift; sourceTree = "<group>"; };
 		AA0000000000000000000012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -105,6 +109,8 @@
 		001E37632DBE8DBC00CFB28E /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				001E37882DBEE86900CFB28E /* ReadAlongNavigationView.swift */,
+				001E37892DBEE86900CFB28E /* ReadAlongUpdatedView.swift */,
 				001E37842DBEDE6500CFB28E /* ReadAlongView.swift */,
 				001E37702DBECEFF00CFB28E /* CastImageView.swift */,
 				001E37712DBECEFF00CFB28E /* CastView.swift */,
@@ -223,6 +229,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA0000000000000000000002 /* ContentView.swift in Sources */,
+				001E378A2DBEE86900CFB28E /* ReadAlongNavigationView.swift in Sources */,
+				001E378B2DBEE86900CFB28E /* ReadAlongUpdatedView.swift in Sources */,
 				001E37642DBE8DBC00CFB28E /* FileSelectionView.swift in Sources */,
 				001E37652DBE8DBC00CFB28E /* OnboardingView.swift in Sources */,
 				001E37662DBE8DBC00CFB28E /* Character.swift in Sources */,
