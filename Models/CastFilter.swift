@@ -1,4 +1,4 @@
-import SwiftUI
+import Foundation // No SwiftUI needed here unless UI elements are added
 
 struct CastFilter: Equatable {
     var gender: String = "M"

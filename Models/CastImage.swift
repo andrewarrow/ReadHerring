@@ -1,4 +1,5 @@
-import SwiftUI
+import Foundation
+import SwiftUI // Keep SwiftUI if needed for Identifiable or other UI elements potentially added later
 
 struct CastImage: Identifiable, Hashable {
     var id = UUID()

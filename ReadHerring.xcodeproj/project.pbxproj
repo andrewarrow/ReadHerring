@@ -21,6 +21,14 @@
 		001E376D2DBE8DBC00CFB28E /* Scene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37582DBE8DBC00CFB28E /* Scene.swift */; };
 		001E376E2DBE8DBC00CFB28E /* Views in Sources */ = {isa = PBXBuildFile; fileRef = 001E37632DBE8DBC00CFB28E /* Views */; };
 		001E376F2DBEA8A200CFB28E /* VoicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E376E2DBEA8A200CFB28E /* VoicesView.swift */; };
+		001E37752DBECEFF00CFB28E /* FilterOptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37722DBECEFF00CFB28E /* FilterOptionView.swift */; };
+		001E37762DBECEFF00CFB28E /* VoiceRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37732DBECEFF00CFB28E /* VoiceRowView.swift */; };
+		001E37772DBECEFF00CFB28E /* CastView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37712DBECEFF00CFB28E /* CastView.swift */; };
+		001E37782DBECEFF00CFB28E /* VoicesViewWrapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37742DBECEFF00CFB28E /* VoicesViewWrapper.swift */; };
+		001E37792DBECEFF00CFB28E /* CastImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37702DBECEFF00CFB28E /* CastImageView.swift */; };
+		001E377D2DBECF1600CFB28E /* VoicePreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E377C2DBECF1600CFB28E /* VoicePreferences.swift */; };
+		001E377E2DBECF1600CFB28E /* CastFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E377A2DBECF1600CFB28E /* CastFilter.swift */; };
+		001E377F2DBECF1600CFB28E /* CastImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E377B2DBECF1600CFB28E /* CastImage.swift */; };
 		AA0000000000000000000001 /* ReadHerringApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000011 /* ReadHerringApp.swift */; };
 		AA0000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000012 /* ContentView.swift */; };
 /* End PBXBuildFile section */
@@ -39,6 +47,14 @@
 		001E37612DBE8DBC00CFB28E /* ProcessingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessingView.swift; sourceTree = "<group>"; };
 		001E37622DBE8DBC00CFB28E /* ScreenplaySummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenplaySummaryView.swift; sourceTree = "<group>"; };
 		001E376E2DBEA8A200CFB28E /* VoicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicesView.swift; sourceTree = "<group>"; };
+		001E37702DBECEFF00CFB28E /* CastImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastImageView.swift; sourceTree = "<group>"; };
+		001E37712DBECEFF00CFB28E /* CastView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastView.swift; sourceTree = "<group>"; };
+		001E37722DBECEFF00CFB28E /* FilterOptionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilterOptionView.swift; sourceTree = "<group>"; };
+		001E37732DBECEFF00CFB28E /* VoiceRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRowView.swift; sourceTree = "<group>"; };
+		001E37742DBECEFF00CFB28E /* VoicesViewWrapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicesViewWrapper.swift; sourceTree = "<group>"; };
+		001E377A2DBECF1600CFB28E /* CastFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastFilter.swift; sourceTree = "<group>"; };
+		001E377B2DBECF1600CFB28E /* CastImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastImage.swift; sourceTree = "<group>"; };
+		001E377C2DBECF1600CFB28E /* VoicePreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicePreferences.swift; sourceTree = "<group>"; };
 		AA0000000000000000000010 /* ReadHerring.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ReadHerring.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000011 /* ReadHerringApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadHerringApp.swift; sourceTree = "<group>"; };
 		AA0000000000000000000012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -59,12 +75,12 @@
 		001E375A2DBE8DBC00CFB28E /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				001E377A2DBECF1600CFB28E /* CastFilter.swift */,
+				001E377B2DBECF1600CFB28E /* CastImage.swift */,
+				001E377C2DBECF1600CFB28E /* VoicePreferences.swift */,
 				001E37572DBE8DBC00CFB28E /* Character.swift */,
 				001E37582DBE8DBC00CFB28E /* Scene.swift */,
 				001E37592DBE8DBC00CFB28E /* ScreenplaySummary.swift */,
-				001E37592DBE8DCF00CFB28E /* VoicePreferences.swift */,
-				001E37592DBE8DCF00CFB29E /* CastFilter.swift */,
-				001E37592DBE8DCF00CFB30E /* CastImage.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -82,6 +98,11 @@
 		001E37632DBE8DBC00CFB28E /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				001E37702DBECEFF00CFB28E /* CastImageView.swift */,
+				001E37712DBECEFF00CFB28E /* CastView.swift */,
+				001E37722DBECEFF00CFB28E /* FilterOptionView.swift */,
+				001E37732DBECEFF00CFB28E /* VoiceRowView.swift */,
+				001E37742DBECEFF00CFB28E /* VoicesViewWrapper.swift */,
 				001E376E2DBEA8A200CFB28E /* VoicesView.swift */,
 				001E375F2DBE8DBC00CFB28E /* FileSelectionView.swift */,
 				001E37602DBE8DBC00CFB28E /* OnboardingView.swift */,
@@ -196,6 +217,11 @@
 				001E37652DBE8DBC00CFB28E /* OnboardingView.swift in Sources */,
 				001E37662DBE8DBC00CFB28E /* Character.swift in Sources */,
 				001E37672DBE8DBC00CFB28E /* ProcessingView.swift in Sources */,
+				001E37752DBECEFF00CFB28E /* FilterOptionView.swift in Sources */,
+				001E37762DBECEFF00CFB28E /* VoiceRowView.swift in Sources */,
+				001E37772DBECEFF00CFB28E /* CastView.swift in Sources */,
+				001E37782DBECEFF00CFB28E /* VoicesViewWrapper.swift in Sources */,
+				001E37792DBECEFF00CFB28E /* CastImageView.swift in Sources */,
 				001E376F2DBEA8A200CFB28E /* VoicesView.swift in Sources */,
 				001E37682DBE8DBC00CFB28E /* PDFProcessor.swift in Sources */,
 				001E37692DBE8DBC00CFB28E /* DocumentPickerViewController.swift in Sources */,
@@ -203,6 +229,9 @@
 				001E376B2DBE8DBC00CFB28E /* ScreenplaySummaryView.swift in Sources */,
 				001E376C2DBE8DBC00CFB28E /* ScreenplaySummary.swift in Sources */,
 				001E376D2DBE8DBC00CFB28E /* Scene.swift in Sources */,
+				001E377D2DBECF1600CFB28E /* VoicePreferences.swift in Sources */,
+				001E377E2DBECF1600CFB28E /* CastFilter.swift in Sources */,
+				001E377F2DBECF1600CFB28E /* CastImage.swift in Sources */,
 				001E376E2DBE8DBC00CFB28E /* Views in Sources */,
 				AA0000000000000000000001 /* ReadHerringApp.swift in Sources */,
 			);
@@ -335,6 +364,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 755R3VBZ84;
 				INFOPLIST_FILE = "$(SRCROOT)/Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -354,6 +384,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 755R3VBZ84;
 				INFOPLIST_FILE = "$(SRCROOT)/Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

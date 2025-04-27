@@ -1,7 +1,7 @@
 import SwiftUI
 import AVFoundation
 import Foundation
-import UIKit
+import UIKit // Keep UIKit for openSettings
 
 // Voices View Wrapper
 struct VoicesViewWrapper: View {

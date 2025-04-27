@@ -1,5 +1,5 @@
 import SwiftUI
-import UIKit
+import UIKit // Keep UIKit as UIImage is used
 
 struct CastImageView: View {
     let castImage: CastImage
