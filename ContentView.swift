@@ -806,7 +806,7 @@ struct OnboardingView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
             
-            Text("This allows the app to read text aloud using high-quality voices")
+            Text("This allows the app to read text.")
                 .font(.subheadline)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
