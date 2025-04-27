@@ -45,7 +45,34 @@ struct ContentView: View {
     }
     
     func processPDF(url: URL) async {
-        guard let pdf = PDFDocument(url: url) else {
+        // Start accessing security-scoped resource if needed
+        let securitySuccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if securitySuccess {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        
+        // Create a local file URL in the app's documents directory
+        let fileManager = FileManager.default
+        let documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let fileName = url.lastPathComponent
+        let localURL = documentsDirectory.appendingPathComponent(fileName)
+        
+        do {
+            if fileManager.fileExists(atPath: localURL.path) {
+                try fileManager.removeItem(at: localURL)
+            }
+            try fileManager.copyItem(at: url, to: localURL)
+        } catch {
+            await MainActor.run {
+                isProcessing = false
+                extractedText = "Failed to copy PDF: \(error.localizedDescription)"
+            }
+            return
+        }
+        
+        guard let pdf = PDFDocument(url: localURL) else {
             await MainActor.run {
                 isProcessing = false
                 extractedText = "Failed to load PDF"
@@ -65,7 +92,8 @@ struct ContentView: View {
                         fullText += pageText + "\n"
                     } else {
                         // Use OCR for this page
-                        if let pageImage = page.thumbnail(of: CGSize(width: 1024, height: 1024), for: .mediaBox) {
+                        let pageImage = page.thumbnail(of: CGSize(width: 1024, height: 1024), for: .mediaBox)
+                        if let cgImage = pageImage.cgImage {
                             let ocrText = performOCR(on: pageImage)
                             fullText += ocrText + "\n"
                         }
@@ -111,7 +139,7 @@ class DocumentPickerViewController: UIDocumentPickerViewController, UIDocumentPi
     init(didPickDocumentHandler: @escaping (URL) -> Void) {
         self.didPickDocumentHandler = didPickDocumentHandler
         let types: [UTType] = [UTType.pdf]
-        super.init(forOpeningContentTypes: types, asCopy: true)
+        super.init(forOpeningContentTypes: types, asCopy: false)
         self.delegate = self
         self.allowsMultipleSelection = false
     }
@@ -122,6 +150,15 @@ class DocumentPickerViewController: UIDocumentPickerViewController, UIDocumentPi
     
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
         guard let url = urls.first else { return }
+        // Start accessing the security-scoped resource
+        let securitySuccess = url.startAccessingSecurityScopedResource()
+        
+        // Process the document
         didPickDocumentHandler(url)
+        
+        // Make sure to release the security-scoped resource when finished
+        if securitySuccess {
+            url.stopAccessingSecurityScopedResource()
+        }
     }
 }
