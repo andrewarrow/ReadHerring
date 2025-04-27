@@ -135,7 +135,7 @@ struct ScreenplaySummaryView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .fullScreenCover(isPresented: $showingReadAlongView) {
-            ReadAlongNavigationView(scenes: summary.scenes)
+            ReadAlongSimpleView(scenes: summary.scenes)
         }
     }
 }

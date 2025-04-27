@@ -29,7 +29,8 @@ struct ContentView: View {
     @State private var isProcessing = false
     @State private var progress: Float = 0.0
     @State private var screenplaySummary: ScreenplaySummary?
-    @State private var activeView: String = "onboarding" // "onboarding", "voices", "cast", or "main"
+    // FORCE SHOW READ ALONG VIEW FOR TESTING
+    @State private var activeView: String = "test_read_along" // "onboarding", "voices", "cast", "main", or "test_read_along"
     // Properties and methods moved to CastImage.swift
     // Properties moved to CastFilter.swift
     
@@ -40,7 +41,22 @@ struct ContentView: View {
     
     var body: some View {
         ZStack {
-            if activeView == "onboarding" {
+            if activeView == "test_read_along" {
+                // Force show ReadAlongSimpleView for debugging
+                VStack {
+                    Text("DIRECT TEST VIEW")
+                        .font(.headline)
+                        .foregroundColor(.red)
+                        .padding()
+                    
+                    // Create a test scene with dialog
+                    let testScene = createTestScene()
+                    ReadAlongSimpleView(scenes: [testScene])
+                        .background(Color.white)
+                        .border(Color.green, width: 4)
+                }
+                .transition(.opacity)
+            } else if activeView == "onboarding" {
                 OnboardingView(showOnboarding: Binding(
                     get: { true },
                     set: { _ in 
@@ -94,6 +110,20 @@ struct ContentView: View {
                 .transition(.opacity)
             }
         }
+    }
+    
+    // Helper function to create a test scene with dialogs
+    private func createTestScene() -> Scene {
+        let scene = Scene(heading: "INT. TECH STARTUP OFFICE - MORNING", 
+                          description: "The office is buzzing with nervous energy", 
+                          location: "TECH STARTUP OFFICE", 
+                          timeOfDay: "MORNING")
+        
+        scene.addDialog(character: "SARAH", text: "Has anyone seen the demo unit? (horrified) Anyone?")
+        scene.addDialog(character: "MIKE", text: "I swear I put it in the conference room last night!")
+        scene.addDialog(character: "JESSICA", text: "Don't worry! I have backup units. (optimistically) They're prototypes from six months ago, but they're basically the same thing, right?")
+        
+        return scene
     }
     
     func processPDF(url: URL) async {

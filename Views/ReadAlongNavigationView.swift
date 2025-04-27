@@ -11,10 +11,17 @@ struct ReadAlongNavigationView: View {
     @State private var speechSynthesizer = AVSpeechSynthesizer()
     
     private var currentScene: Scene {
-        scenes[currentSceneIndex]
+        guard !scenes.isEmpty, currentSceneIndex < scenes.count else {
+            // This is an emergency fallback - should never happen
+            return Scene(heading: "ERROR", description: "No scenes available", location: "", timeOfDay: "")
+        }
+        return scenes[currentSceneIndex]
     }
     
     private var currentDialog: Scene.Dialog? {
+        guard !scenes.isEmpty, currentSceneIndex < scenes.count else {
+            return nil
+        }
         guard !currentScene.dialogs.isEmpty, currentDialogIndex < currentScene.dialogs.count else {
             return nil
         }
@@ -37,6 +44,31 @@ struct ReadAlongNavigationView: View {
     
     var body: some View {
         VStack {
+            // DEBUG HEADER
+            Text("DEBUGGING ReadAlongNavigationView")
+                .font(.headline)
+                .foregroundColor(.red)
+                .padding(.top, 20)
+            
+            // Scene and Dialog Stats
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Scenes: \(scenes.count)")
+                    .foregroundColor(.orange)
+                Text("Current Scene Index: \(currentSceneIndex)")
+                    .foregroundColor(.orange)
+                if !scenes.isEmpty && currentSceneIndex < scenes.count {
+                    Text("Current Scene Dialogs: \(currentScene.dialogs.count)")
+                        .foregroundColor(.orange)
+                    Text("Current Dialog Index: \(currentDialogIndex)")
+                        .foregroundColor(.orange)
+                }
+            }
+            .font(.caption)
+            .padding(.vertical, 8)
+            .background(Color.black.opacity(0.1))
+            .cornerRadius(8)
+            .padding(.horizontal)
+            
             // Navigation buttons
             HStack {
                 Button(action: {
@@ -68,6 +100,28 @@ struct ReadAlongNavigationView: View {
                 .disabled(!hasNext)
             }
             .padding()
+            .background(Color.gray.opacity(0.2))
+            
+            // Character name above dialog
+            if let dialog = currentDialog {
+                Text(dialog.character)
+                    .font(.headline)
+                    .foregroundColor(.black)
+                    .padding(.horizontal)
+                    .padding(.bottom, 2)
+                    .padding(.top, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.yellow.opacity(0.3))
+            } else {
+                Text("NO CHARACTER SELECTED")
+                    .font(.headline)
+                    .foregroundColor(.red)
+                    .padding(.horizontal)
+                    .padding(.bottom, 2)
+                    .padding(.top, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.yellow.opacity(0.3))
+            }
             
             // Current dialog display
             if let dialog = currentDialog {
@@ -77,12 +131,59 @@ struct ReadAlongNavigationView: View {
                 }
                 .padding()
                 .background(Color(.systemGray6))
-                .cornerRadius(12)
+                .border(Color.green, width: 2)
+                .cornerRadius(8)
                 .padding(.horizontal)
+                .frame(minHeight: 150)
+            } else {
+                // Show placeholder when no dialog is available
+                VStack {
+                    Text("Dialog Debug Info:")
+                        .fontWeight(.bold)
+                    
+                    if scenes.isEmpty {
+                        Text("⚠️ NO SCENES AVAILABLE")
+                            .foregroundColor(.red)
+                    } else if currentScene.dialogs.isEmpty {
+                        Text("⚠️ NO DIALOGS IN SCENE \(currentSceneIndex + 1)")
+                            .foregroundColor(.red)
+                    } else {
+                        Text("⚠️ DIALOG INDEX ERROR")
+                            .foregroundColor(.red)
+                    }
+                }
+                .padding()
+                .background(Color.red.opacity(0.1))
+                .border(Color.red, width: 2)
+                .cornerRadius(8)
+                .padding(.horizontal)
+                .frame(minHeight: 150)
             }
             
             Spacer()
+            
+            // Bottom debug section
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Scene Count: \(scenes.count)")
+                if !scenes.isEmpty && currentSceneIndex < scenes.count {
+                    Text("Scene Heading: \(currentScene.heading)")
+                    Text("Dialog Count in Scene: \(currentScene.dialogs.count)")
+                }
+                if let dialog = currentDialog {
+                    Text("Current Dialog Character: \(dialog.character)")
+                    Text("Current Dialog Text Length: \(dialog.text.count) chars")
+                }
+            }
+            .font(.caption)
+            .foregroundColor(.white)
+            .padding()
+            .background(Color.black)
+            .cornerRadius(8)
+            .padding(.horizontal)
+            .padding(.bottom, 20)
         }
+        .background(Color.white)  // Make sure the background is visible
+        .edgesIgnoringSafeArea(.bottom)
         .onAppear {
             assignVoices()
             readCurrentDialog()
