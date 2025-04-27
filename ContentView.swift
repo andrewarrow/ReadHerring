@@ -157,6 +157,18 @@ struct ContentView: View {
                                 .font(.body)
                                 .foregroundColor(.secondary)
                                 .padding(.top, 2)
+                            
+                            Button(action: {
+                                saveExtractedText(summary.rawText)
+                            }) {
+                                Text("Save Extracted Text")
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                    .background(Color.blue)
+                                    .cornerRadius(8)
+                            }
+                            .padding(.top, 10)
                         }
                     }
                     .padding()
@@ -270,10 +282,13 @@ struct ContentView: View {
         let lines = text.components(separatedBy: .newlines)
         
         // Regex patterns for scene headings - more inclusive patterns
-        let traditionalSceneRegex = try? NSRegularExpression(pattern: "^\\s*(INT\\.|EXT\\.|INT\\/EXT\\.|I\\/E|INTERIOR|EXTERIOR|INT |EXT )\\s+(.+?)(?:\\s+-\\s+(.+?))?(?:\\s+([0-9\\.]+\\s+[0-9\\.]+))?\\s*$", options: [.caseInsensitive])
+        let traditionalSceneRegex = try? NSRegularExpression(pattern: "^\\s*(?:[0-9]+\\s*)?(?:\"[^\"]+\"\\s*)?(?:FADE\\s+IN:)?\\s*(INT\\.|EXT\\.|INT\\/EXT\\.|I\\/E|INTERIOR|EXTERIOR|INT |EXT )\\s+(.+?)(?:\\s+-\\s+(.+?))?(?:\\s+([0-9\\.]+\\s+[0-9\\.]+))?\\s*$", options: [.caseInsensitive])
         
         // Fallback regex for numbered scenes or other formats
-        let numberedSceneRegex = try? NSRegularExpression(pattern: "^\\s*(?:SCENE|SC\\.?)\\s+([0-9]+)\\s*(.*)$", options: [.caseInsensitive])
+        let numberedSceneRegex = try? NSRegularExpression(pattern: "^\\s*(?:[0-9]+|SCENE|SC\\.?)\\s+(.*)$", options: [.caseInsensitive])
+        
+        // Handle screenplay scene numbers (like "1", "2") 
+        let sceneNumberRegex = try? NSRegularExpression(pattern: "^\\s*([0-9]+)\\s*(.*)$", options: [])
         
         // For extracting location and time from scene headings
         let locationTimeRegex = try? NSRegularExpression(pattern: "^(.+?)(?:\\s+-\\s+|\\s+|\\s*-\\s*|\\s*,\\s*)([A-Z\\s]+(?:DAY|NIGHT|MORNING|EVENING|DUSK|DAWN|AFTERNOON|CONTINUOUS|LATER))$", options: [])
@@ -316,7 +331,14 @@ struct ContentView: View {
                 isSceneHeading = true
                 let nsString = trimmedLine as NSString
                 sceneHeadingDetails.fullHeading = nsString.substring(with: match.range)
-                let locAndTime = match.range(at: 2).location != NSNotFound ? nsString.substring(with: match.range(at: 2)) : ""
+                
+                // Safely extract location and time by checking range validity first
+                let locAndTime: String
+                if match.numberOfRanges > 2 && match.range(at: 2).location != NSNotFound {
+                    locAndTime = nsString.substring(with: match.range(at: 2))
+                } else {
+                    locAndTime = ""
+                }
                 
                 // Extract location and time of day
                 sceneHeadingDetails.location = locAndTime
@@ -324,8 +346,12 @@ struct ContentView: View {
                 if let locTimeRegex = locationTimeRegex,
                    let locTimeMatch = locTimeRegex.firstMatch(in: locAndTime, options: [], range: NSRange(location: 0, length: locAndTime.utf16.count)) {
                     let locTimeNS = locAndTime as NSString
-                    sceneHeadingDetails.location = locTimeMatch.range(at: 1).location != NSNotFound ? locTimeNS.substring(with: locTimeMatch.range(at: 1)) : ""
-                    sceneHeadingDetails.timeOfDay = locTimeMatch.range(at: 2).location != NSNotFound ? locTimeNS.substring(with: locTimeMatch.range(at: 2)) : ""
+                    if locTimeMatch.numberOfRanges > 1 && locTimeMatch.range(at: 1).location != NSNotFound {
+                        sceneHeadingDetails.location = locTimeNS.substring(with: locTimeMatch.range(at: 1))
+                    }
+                    if locTimeMatch.numberOfRanges > 2 && locTimeMatch.range(at: 2).location != NSNotFound {
+                        sceneHeadingDetails.timeOfDay = locTimeNS.substring(with: locTimeMatch.range(at: 2))
+                    }
                 } else {
                     // Try to extract time indicators manually
                     for indicator in timeIndicators {
@@ -340,8 +366,10 @@ struct ContentView: View {
                     }
                 }
                 
-                // Get scene number if present
-                sceneHeadingDetails.sceneNumber = match.range(at: 4).location != NSNotFound ? nsString.substring(with: match.range(at: 4)) : nil
+                // Get scene number if present - checking range validity
+                if match.numberOfRanges > 4 && match.range(at: 4).location != NSNotFound {
+                    sceneHeadingDetails.sceneNumber = nsString.substring(with: match.range(at: 4))
+                }
             }
             // Approach 2: Numbered scene format
             else if let numberedRegex = numberedSceneRegex,
@@ -350,8 +378,21 @@ struct ContentView: View {
                 isSceneHeading = true
                 let nsString = trimmedLine as NSString
                 sceneHeadingDetails.fullHeading = nsString.substring(with: match.range)
-                sceneHeadingDetails.sceneNumber = match.range(at: 1).location != NSNotFound ? nsString.substring(with: match.range(at: 1)) : nil
-                let restOfLine = match.range(at: 2).location != NSNotFound ? nsString.substring(with: match.range(at: 2)) : ""
+                
+                // Safely extract scene number and other parts
+                let restOfLine: String
+                if match.numberOfRanges > 1 && match.range(at: 1).location != NSNotFound {
+                    // Check if this is a scene number (digits) or content
+                    let part = nsString.substring(with: match.range(at: 1))
+                    if let _ = Int(part) {
+                        sceneHeadingDetails.sceneNumber = part
+                        restOfLine = ""
+                    } else {
+                        restOfLine = part
+                    }
+                } else {
+                    restOfLine = ""
+                }
                 
                 // Try to extract location and time
                 sceneHeadingDetails.location = restOfLine
@@ -435,15 +476,25 @@ struct ContentView: View {
             let isAllCaps = trimmedLine.uppercased() == trimmedLine && !trimmedLine.isEmpty
             let hasParenthetical = trimmedLine.contains("(") && trimmedLine.contains(")")
             
+            // Character name pattern regex - more specific to handle screenplay format
+            let characterNameRegex = try? NSRegularExpression(pattern: "^\\s*([A-Z][A-Z\\s']+)(?:\\s*\\([^)]+\\))?\\s*$", options: [])
+            let isCharacterName = characterNameRegex?.firstMatch(in: trimmedLine, options: [], range: NSRange(location: 0, length: trimmedLine.utf16.count)) != nil
+            
             // More general character detection
-            if isAllCaps || (hasParenthetical && trimmedLine.uppercased().contains(trimmedLine.uppercased().replacingOccurrences(of: "\\(.*\\)", with: "", options: .regularExpression))) {
+            if isAllCaps || isCharacterName || (hasParenthetical && trimmedLine.uppercased().contains(trimmedLine.uppercased().replacingOccurrences(of: "\\(.*\\)", with: "", options: .regularExpression))) {
                 // Filter known non-character elements
                 let isNotSceneHeading = !trimmedLine.contains("INT") && !trimmedLine.contains("EXT") && 
                                       !trimmedLine.contains("INTERIOR") && !trimmedLine.contains("EXTERIOR")
                 let isNotTransition = !trimmedLine.contains("CUT TO") && !trimmedLine.contains("FADE TO") && 
-                                    !trimmedLine.contains("DISSOLVE") && !trimmedLine.hasSuffix(":")
+                                    !trimmedLine.contains("DISSOLVE") && !trimmedLine.hasSuffix(":") &&
+                                    !trimmedLine.contains("FADE IN") && !trimmedLine.contains("ANGLE")
                 let isNotDirection = !trimmedLine.contains("ANGLE ON") && !trimmedLine.contains("CAMERA") &&
-                                   !trimmedLine.contains("POV") && !trimmedLine.contains("TITLE")
+                                   !trimmedLine.contains("POV") && !trimmedLine.contains("TITLE") &&
+                                   !trimmedLine.contains("INSERT") && !trimmedLine.contains("CLOSE UP")
+                
+                // Additional filter for camera directions in screenplay
+                let isNotCameraDirection = !trimmedLine.hasPrefix("ANGLE") && !trimmedLine.hasPrefix("CAMERA") && 
+                                          !trimmedLine.contains("FOLLOW") && !trimmedLine.contains("PAN")
                 
                 // Character formatting checks
                 let isReasonableLength = trimmedLine.count < 50 // Character names aren't very long
@@ -455,17 +506,23 @@ struct ContentView: View {
                                        lines[index + 1].trimmingCharacters(in: .whitespacesAndNewlines).uppercased() != 
                                        lines[index + 1].trimmingCharacters(in: .whitespacesAndNewlines)
                 
-                if isNotSceneHeading && isNotTransition && isNotDirection && isReasonableLength && hasReasonableWords && hasDialogueAfter {
+                if isNotSceneHeading && isNotTransition && isNotDirection && isNotCameraDirection && isReasonableLength && hasReasonableWords && hasDialogueAfter {
                     // Extract character name (remove parentheticals and modifiers)
                     var characterName = trimmedLine
                     
-                    // Remove parentheticals like (V.O.) or (O.S.)
+                    // Remove parentheticals like (V.O.) or (O.S.) or (CONT'D)
                     characterName = characterName.replacingOccurrences(of: "\\(.*?\\)", with: "", options: .regularExpression)
                         .trimmingCharacters(in: .whitespacesAndNewlines)
                     
                     // Remove any non-alphabetic suffixes and common character modifiers
                     characterName = characterName.replacingOccurrences(of: "\\s+CONT'D", with: "", options: .regularExpression)
                     characterName = characterName.replacingOccurrences(of: "\\s+\\(CONT'D\\)", with: "", options: .regularExpression)
+                    characterName = characterName.replacingOccurrences(of: "\\s+O\\.S\\.", with: "", options: .regularExpression)
+                    characterName = characterName.replacingOccurrences(of: "\\s+\\(O\\.S\\.\\)", with: "", options: .regularExpression)
+                    characterName = characterName.replacingOccurrences(of: "\\s+V\\.O\\.", with: "", options: .regularExpression)
+                    characterName = characterName.replacingOccurrences(of: "\\s+\\(V\\.O\\.\\)", with: "", options: .regularExpression)
+                    
+                    // Remove any non-alphabetic characters at the end
                     characterName = characterName.trimmingCharacters(in: CharacterSet.letters.inverted)
                     
                     // Only process if name has substance (length check helps filter false positives)
@@ -573,6 +630,145 @@ struct ContentView: View {
         }
         
         return recognizedText
+    }
+    
+    func saveExtractedText(_ text: String) {
+        // Get a path in Documents directory
+        let fileManager = FileManager.default
+        let documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyyMMdd_HHmmss"
+        let timestamp = dateFormatter.string(from: Date())
+        
+        // Create enhanced text with debug info
+        let debugText = generateDebugText(text)
+        
+        // Save original text
+        let fileName = "screenplay_\(timestamp).txt"
+        let fileURL = documentsDirectory.appendingPathComponent(fileName)
+        
+        // Save debug version
+        let debugFileName = "screenplay_debug_\(timestamp).txt"
+        let debugFileURL = documentsDirectory.appendingPathComponent(debugFileName)
+        
+        do {
+            // Write both files
+            try text.write(to: fileURL, atomically: true, encoding: .utf8)
+            try debugText.write(to: debugFileURL, atomically: true, encoding: .utf8)
+            
+            // Share both files
+            let activityVC = UIActivityViewController(
+                activityItems: [fileURL, debugFileURL],
+                applicationActivities: nil
+            )
+            
+            // Present the share sheet
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let rootViewController = windowScene.windows.first?.rootViewController {
+                rootViewController.present(activityVC, animated: true)
+            }
+        } catch {
+            print("Failed to save text: \(error.localizedDescription)")
+        }
+    }
+    
+    func generateDebugText(_ text: String) -> String {
+        // Split text into lines for analysis
+        let lines = text.components(separatedBy: .newlines)
+        var result = "=== SCREENPLAY DEBUG ANALYSIS ===\n\n"
+        
+        // Regex patterns for scene headings
+        let traditionalSceneRegex = try? NSRegularExpression(pattern: "^\\s*(INT\\.|EXT\\.|INT\\/EXT\\.|I\\/E|INTERIOR|EXTERIOR|INT |EXT )\\s+(.+?)(?:\\s+-\\s+(.+?))?(?:\\s+([0-9\\.]+\\s+[0-9\\.]+))?\\s*$", options: [.caseInsensitive])
+        let numberedSceneRegex = try? NSRegularExpression(pattern: "^\\s*(?:SCENE|SC\\.?)\\s+([0-9]+)\\s*(.*)$", options: [.caseInsensitive])
+        
+        // Time indicators
+        let timeIndicators = ["DAY", "NIGHT", "MORNING", "EVENING", "DUSK", "DAWN", "AFTERNOON", "CONTINUOUS", "LATER", "MOMENTS LATER"]
+        
+        // Process each line
+        for (index, line) in lines.enumerated() {
+            let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            if trimmedLine.isEmpty {
+                result += "[\(index+1)] EMPTY LINE\n"
+                continue
+            }
+            
+            // Check for potential scene heading
+            var isSceneHeading = false
+            if let sceneRegex = traditionalSceneRegex,
+               sceneRegex.firstMatch(in: trimmedLine, options: [], range: NSRange(location: 0, length: trimmedLine.utf16.count)) != nil {
+                result += "[\(index+1)] SCENE HEADING (Traditional): \(trimmedLine)\n"
+                isSceneHeading = true
+            } else if let numberedRegex = numberedSceneRegex,
+                      numberedRegex.firstMatch(in: trimmedLine, options: [], range: NSRange(location: 0, length: trimmedLine.utf16.count)) != nil {
+                result += "[\(index+1)] SCENE HEADING (Numbered): \(trimmedLine)\n"
+                isSceneHeading = true
+            } else if trimmedLine.uppercased() == trimmedLine && trimmedLine.count > 5 && trimmedLine.count < 100 {
+                let hasIntExt = trimmedLine.contains("INT") || trimmedLine.contains("EXT") || 
+                               trimmedLine.contains("INTERIOR") || trimmedLine.contains("EXTERIOR") ||
+                               trimmedLine.contains("I/E") || trimmedLine.contains("INT/EXT")
+                
+                var hasTimeIndicator = false
+                for indicator in timeIndicators {
+                    if trimmedLine.contains(indicator) {
+                        hasTimeIndicator = true
+                        break
+                    }
+                }
+                
+                if (hasIntExt || hasTimeIndicator) && !trimmedLine.hasSuffix(":") && !trimmedLine.contains("TO:") {
+                    result += "[\(index+1)] SCENE HEADING (All Caps): \(trimmedLine)\n"
+                    isSceneHeading = true
+                }
+            }
+            
+            if !isSceneHeading {
+                // Check for potential character name
+                let isAllCaps = trimmedLine.uppercased() == trimmedLine && !trimmedLine.isEmpty
+                let hasParenthetical = trimmedLine.contains("(") && trimmedLine.contains(")")
+                
+                if (isAllCaps || hasParenthetical) && trimmedLine.count < 50 {
+                    // Filter known non-character elements
+                    let isNotSceneHeading = !trimmedLine.contains("INT") && !trimmedLine.contains("EXT") && 
+                                          !trimmedLine.contains("INTERIOR") && !trimmedLine.contains("EXTERIOR")
+                    let isNotTransition = !trimmedLine.contains("CUT TO") && !trimmedLine.contains("FADE TO") && 
+                                        !trimmedLine.contains("DISSOLVE") && !trimmedLine.hasSuffix(":")
+                    
+                    if isNotSceneHeading && isNotTransition && trimmedLine.components(separatedBy: .whitespaces).count <= 4 {
+                        // Check if followed by potential dialogue
+                        let hasDialogueAfter = index + 1 < lines.count && 
+                                           !lines[index + 1].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+                                           lines[index + 1].trimmingCharacters(in: .whitespacesAndNewlines).uppercased() != 
+                                           lines[index + 1].trimmingCharacters(in: .whitespacesAndNewlines)
+                        
+                        if hasDialogueAfter {
+                            result += "[\(index+1)] CHARACTER: \(trimmedLine)\n"
+                            
+                            // Add a few lines of potential dialogue
+                            var dialogueCount = 0
+                            var i = index + 1
+                            while i < lines.count && dialogueCount < 3 {
+                                let nextLine = lines[i].trimmingCharacters(in: .whitespacesAndNewlines)
+                                if !nextLine.isEmpty && nextLine.uppercased() != nextLine {
+                                    result += "  [\(i+1)] DIALOGUE: \(nextLine)\n"
+                                    dialogueCount += 1
+                                }
+                                i += 1
+                            }
+                        } else {
+                            result += "[\(index+1)] POSSIBLE CHARACTER (no dialogue): \(trimmedLine)\n"
+                        }
+                    } else if isAllCaps {
+                        result += "[\(index+1)] ALL CAPS (not character): \(trimmedLine)\n"
+                    }
+                } else {
+                    // Regular text line
+                    result += "[\(index+1)] TEXT: \(trimmedLine.prefix(50))" + (trimmedLine.count > 50 ? "..." : "") + "\n"
+                }
+            }
+        }
+        
+        return result
     }
 }
 
