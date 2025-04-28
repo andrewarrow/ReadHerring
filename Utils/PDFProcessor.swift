@@ -59,6 +59,15 @@ class PDFProcessor {
         let lines = text.components(separatedBy: .newlines)
         var result = "=== SCREENPLAY DEBUG ANALYSIS ===\n\n"
         
+        // Add raw line debug output
+        result += "=== RAW LINE ANALYSIS ===\n"
+        // Show the first 50 lines with line numbers and exact content
+        for (index, line) in lines.prefix(50).enumerated() {
+            let lineWithWhitespace = line.replacingOccurrences(of: " ", with: "·")
+            result += "Line \(index+1): '\(lineWithWhitespace)'\n"
+        }
+        result += "\n=== STRUCTURAL ANALYSIS ===\n\n"
+        
         // Regex patterns for scene headings
         let traditionalSceneRegex = try? NSRegularExpression(pattern: "^\\s*(INT\\.|EXT\\.|INT\\/EXT\\.|I\\/E|INTERIOR|EXTERIOR|INT |EXT )\\s+(.+?)(?:\\s+-\\s+(.+?))?(?:\\s+([0-9\\.]+\\s+[0-9\\.]+))?\\s*$", options: [.caseInsensitive])
         let numberedSceneRegex = try? NSRegularExpression(pattern: "^\\s*(?:SCENE|SC\\.?)\\s+([0-9]+)\\s*(.*)$", options: [.caseInsensitive])

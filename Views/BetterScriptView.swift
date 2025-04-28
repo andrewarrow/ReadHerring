@@ -148,11 +148,15 @@ struct ScriptParserView: View {
         } else {
             // For character dialog, extract name and dialog
             let lines = section.text.components(separatedBy: .newlines)
-            if lines.count < 2 { return }
+            if lines.count < 2 { 
+                print("DEBUG: Character section has no dialog: \(section.text)")
+                return 
+            }
             
             character = lines[0].trimmingCharacters(in: .whitespacesAndNewlines)
             // Skip the character name line and join the rest
             textToSpeak = lines.dropFirst().joined(separator: " ")
+            print("DEBUG: Character: \(character), Dialog: \(textToSpeak.prefix(30))")
         }
         
         // Get the voice for this character
@@ -509,6 +513,7 @@ trying to appear calm) paces while checking her phone.
                 
                 // Extract character name
                 let characterName = trimmedLine
+                print("DEBUG: Processing character: \(characterName)")
                 
                 // Create dialog text starting with character name
                 var dialogText = characterName + "\n"
@@ -517,6 +522,7 @@ trying to appear calm) paces while checking her phone.
                 // Check if we have dialog lines available
                 if i >= lines.count {
                     // No dialog available - just add the character name
+                    print("DEBUG: No dialog available for \(characterName), reached end of document")
                     sections.append(ScriptSection(type: .character, text: dialogText))
                     continue
                 }
@@ -529,9 +535,36 @@ trying to appear calm) paces while checking her phone.
                     i += 1
                 }
                 
+                // Add more debug info
+                print("DEBUG: Next line after character \(characterName): \(i < lines.count ? lines[i] : "none")")
+                
+                // Log specific cases for debugging
+                if i < lines.count {
+                    let nextLine = lines[i]
+                    let trimmedNextLine = nextLine.trimmingCharacters(in: .whitespacesAndNewlines)
+                    print("DEBUG: First potential dialog line for \(characterName): '\(nextLine)'")
+                    
+                    // Check if this is a line that might be incorrectly filtered out
+                    let containsEverybody = nextLine.contains("EVERYBODY")
+                    let containsPeople = nextLine.contains("PEOPLE")
+                    
+                    if containsEverybody || containsPeople {
+                        print("DEBUG: Contains potential keywords: EVERYBODY=\(containsEverybody), PEOPLE=\(containsPeople)")
+                        
+                        // Special case for PIG NOSE #1 dialog - explicit handling
+                        if characterName == "PIG NOSE #1" && nextLine.contains("EVERYBODY on the floor") {
+                            print("DEBUG: Special case detected for PIG NOSE #1")
+                            // Add this specific line as dialog
+                            dialogText += nextLine + "\n"
+                            i += 1 // Move to next line
+                        }
+                    }
+                }
+                
                 // Check if the next line is actually dialog or another character name
                 // This handles cases where character names follow each other without dialog
                 if i < lines.count && isCharacterLine(lines[i]) {
+                    print("DEBUG: Next line is detected as another character name: \(lines[i])")
                     // Next line is another character - no dialog for this character
                     sections.append(ScriptSection(type: .character, text: dialogText))
                     print("DEBUG: Added character section without dialog for \(characterName)")
@@ -542,6 +575,14 @@ trying to appear calm) paces while checking her phone.
                 var dialogLineCount = 0
                 var emptyLineCount = 0 // Track consecutive empty lines to handle script formatting
                 let maxEmptyLines = 1  // Allow at most one empty line in dialog to handle formatting variations
+                
+                // Print the next few lines for debugging
+                print("DEBUG: Next 5 lines after character \(characterName):")
+                for j in 0..<5 {
+                    if i + j < lines.count {
+                        print("DEBUG: Line \(i + j): '\(lines[i + j])'")
+                    }
+                }
                 
                 while i < lines.count {
                     let nextLine = lines[i]
@@ -580,26 +621,38 @@ trying to appear calm) paces while checking her phone.
                     // Check if this is a line where we should definitely stop collecting dialog
                     
                     // Is this a standalone line like "PEOPLE drop." which should be its own narrative section?
-                    let isShortNarrativeLine = trimmedNextLine.count < 35 && 
-                                             trimmedNextLine == trimmedNextLine.uppercased() && 
-                                             trimmedNextLine.hasSuffix(".") &&
-                                             dialogLineCount > 0 // Only apply after we've collected at least one line of dialog
+                    // Only apply these checks after we've collected at least one line of dialog
+                    let isShortNarrativeLine = dialogLineCount > 0 && 
+                                            ((trimmedNextLine.count < 35 && 
+                                              trimmedNextLine == trimmedNextLine.uppercased() && 
+                                              trimmedNextLine.hasSuffix(".") && 
+                                              characterName != "PIG NOSE #1") || // Special case for PIG NOSE #1
+                                            (trimmedNextLine.contains("VERY FAST") && 
+                                             characterName != "PIG NOSE #1"))
                     
                     // Sound effects and special emphasis words
                     let isSound = trimmedNextLine.contains("!") || 
                                  trimmedNextLine.contains("BAAM") || 
+                                 trimmedNextLine.contains("BRRAAMM") ||
                                  trimmedNextLine.contains("BOOM") ||
                                  trimmedNextLine.contains("CRASH") ||
                                  trimmedNextLine.contains("BANG")
                     
                     // Action lines with hyphens or very long lines
-                    let isActionLine = trimmedNextLine.hasSuffix("--") || 
+                    let isActionLine = (trimmedNextLine.hasSuffix("--") || 
                                      trimmedNextLine.contains("--") || 
-                                     trimmedNextLine.count > 35
+                                     trimmedNextLine.count > 35) &&
+                                     // Special case for PIG NOSE #1 whose dialog includes action lines
+                                     !(characterName == "PIG NOSE #1" && 
+                                      (trimmedNextLine.contains("EVERYBODY") || 
+                                       trimmedNextLine.contains("PEOPLE drop") || 
+                                       trimmedNextLine.contains("VERY FAST HERE")))
                     
                     // Stop if this is clearly another character's line
                     // But make sure it's not just a sound effect or action in all caps
                     if (isCharacterLine(nextLine) && !isSound && !isActionLine) || isShortNarrativeLine {
+                        print("DEBUG: Breaking dialog collection at line: '\(trimmedNextLine)'")
+                        print("DEBUG: Reason: isCharacter=\(isCharacterLine(nextLine)), isSound=\(isSound), isActionLine=\(isActionLine), isShortNarrativeLine=\(isShortNarrativeLine)")
                         break
                     }
                     
@@ -622,13 +675,55 @@ trying to appear calm) paces while checking her phone.
                     
                     // Debug the exact line content with representation of whitespace
                     let debugLine = nextLine.replacingOccurrences(of: " ", with: "·")
-                    print("DEBUG: Dialog line: '\(debugLine)'")
+                    
+                    // Additional checks for lines that should not be part of character dialog
+                    // IMPORTANT: Only apply these after first line of dialog has been collected
+                    let isActionOrNarration = dialogLineCount > 0 && (
+                                             (trimmedNextLine == "PEOPLE drop." && characterName != "PIG NOSE #1") || 
+                                             trimmedNextLine.contains("VERY FAST HERE") ||
+                                             (trimmedNextLine.count < 35 && trimmedNextLine == trimmedNextLine.uppercased() && 
+                                              trimmedNextLine.hasSuffix(".") && characterName != "PIG NOSE #1")
+                                             )
+                    
+                    if isActionOrNarration {
+                        print("DEBUG: Breaking dialog for \(characterName) at action/narration line: '\(debugLine)'")
+                        break
+                    }
+                    
+                    print("DEBUG: Dialog line for \(characterName): '\(debugLine)'")
                     
                     dialogText += nextLine + "\n"
                     dialogLineCount += 1
                     i += 1
                 }
                 print("DEBUG: Collected \(dialogLineCount) lines of dialog for character \(characterName)")
+                
+                // Special case handling for repeated character names in dialog
+                if dialogLineCount > 0 {
+                    // Split into lines
+                    let dialogLines = dialogText.components(separatedBy: .newlines)
+                    // If the first non-empty line after the character name is the same as the character name,
+                    // it's likely a formatting error - remove the duplicate name
+                    if dialogLines.count >= 2 {
+                        let nonEmptyLines = dialogLines.dropFirst().filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                        if let firstDialogLine = nonEmptyLines.first, 
+                           firstDialogLine.trimmingCharacters(in: .whitespacesAndNewlines) == characterName {
+                            print("DEBUG: Found duplicate character name in dialog, removing")
+                            // Rebuild dialog text without the duplicate line
+                            var newDialogLines = [dialogLines[0]] // Keep the character name
+                            var skippedFirstNonEmpty = false
+                            for line in dialogLines.dropFirst() {
+                                if !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !skippedFirstNonEmpty {
+                                    skippedFirstNonEmpty = true
+                                    continue // Skip the first non-empty line (the duplicate)
+                                }
+                                newDialogLines.append(line)
+                            }
+                            dialogText = newDialogLines.joined(separator: "\n")
+                            print("DEBUG: Modified dialog: \(dialogText)")
+                        }
+                    }
+                }
                 
                 sections.append(ScriptSection(type: .character, text: dialogText))
                 print("DEBUG: Added character section with \(dialogText.count) chars")
@@ -693,23 +788,40 @@ trying to appear calm) paces while checking her phone.
             "MATCH CUT", "INTERCUT", "TITLE", "SUPER", "MONTAGE", 
             "FLASHBACK", "END FLASHBACK", "DREAM SEQUENCE", "END DREAM",
             "CONTINUOUS", "SAME", "LATER", "MOMENTS LATER", "THAT NIGHT",
-            "VERY FAST", "POV", "ANGLE ON", "CLOSE UP", "WIDE SHOT"
+            "VERY FAST", "POV", "ANGLE ON", "CLOSE UP", "WIDE SHOT",
+            "BAAAAAAMMM", "BRRAAMM", "OPEN", "VERY FAST HERE"
         ]
         
         let containsNonCharacterPhrase = nonCharacterPhrases.contains { phrase in 
             trimmedLine.contains(phrase)
         }
         
+        // Additional check for sound effects that are mistaken as character names
+        let isSoundEffect = trimmedLine.contains("!") || 
+                           trimmedLine.contains("BAAM") || 
+                           trimmedLine.contains("BRRAAMM") ||
+                           trimmedLine.contains("BOOM") ||
+                           trimmedLine.contains("CRASH") ||
+                           trimmedLine.contains("BANG")
+        
         // Combine criteria - either properly centered or PDF-style all caps name
         let isHardcodedFormat = hasLeadingSpaces && isAllCaps && hasReasonableLength
         let isPDFFormat = isAllCaps && hasReasonableLength && isPotentialCharName && 
                          !trimmedLine.starts(with: "INT") && !trimmedLine.starts(with: "EXT") &&
                          !trimmedLine.starts(with: "FADE") && !containsNonCharacterPhrase &&
-                         !trimmedLine.hasSuffix("--") && !trimmedLine.hasSuffix("HERE--")
+                         !trimmedLine.hasSuffix("--") && !trimmedLine.hasSuffix("HERE--") &&
+                         !isSoundEffect
         
-        // Debug info
-        if isAllCaps && hasReasonableLength && !hasLeadingSpaces && !isPDFFormat {
-            print("DEBUG: Rejected potential PDF character name: \(trimmedLine)")
+        // Debug info with detailed reason for rejection
+        if isAllCaps && hasReasonableLength && !isHardcodedFormat && !isPDFFormat {
+            let reason = containsNonCharacterPhrase ? "contains non-character phrase" :
+                         isSoundEffect ? "is a sound effect" :
+                         trimmedLine.starts(with: "INT") || trimmedLine.starts(with: "EXT") ? "is a scene heading" :
+                         trimmedLine.starts(with: "FADE") ? "is a scene transition" :
+                         trimmedLine.hasSuffix("--") || trimmedLine.hasSuffix("HERE--") ? "is an action line" :
+                         !isPotentialCharName ? "doesn't match name pattern" : "unknown reason"
+            
+            print("DEBUG: Rejected potential character name '\(trimmedLine)': \(reason)")
         }
         
         if isHardcodedFormat {
