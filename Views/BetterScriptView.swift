@@ -524,18 +524,56 @@ trying to appear calm) paces while checking her phone.
                 
                 // Collect dialog content
                 var dialogLineCount = 0
+                var emptyLineCount = 0 // Track consecutive empty lines to handle script formatting
+                let maxEmptyLines = 1  // Allow at most one empty line in dialog to handle formatting variations
+                
                 while i < lines.count {
                     let nextLine = lines[i]
                     let trimmedNextLine = nextLine.trimmingCharacters(in: .whitespacesAndNewlines)
                     
-                    // Stop if line is empty
+                    // Handle empty lines - allow limited empty lines within dialog
                     if trimmedNextLine.isEmpty {
-                        i += 1
+                        emptyLineCount += 1
+                        if emptyLineCount > maxEmptyLines {
+                            i += 1
+                            break
+                        } else {
+                            // Add the empty line and continue
+                            dialogText += "\n"
+                            i += 1
+                            continue
+                        }
+                    } else {
+                        emptyLineCount = 0 // Reset empty line counter when text is found
+                    }
+                    
+                    // Check for scene transition markers that would definitely end dialog
+                    let definiteSceneTransitions = [
+                        "INT.", "EXT.", "FADE IN:", "FADE OUT:", "CUT TO:", "DISSOLVE TO:",
+                        "INTERCUT:", "TITLE:", "SUPER:", "MONTAGE:"
+                    ]
+                    
+                    let isDefiniteTransition = definiteSceneTransitions.contains { marker in
+                        trimmedNextLine.starts(with: marker)
+                    }
+                    
+                    if isDefiniteTransition {
                         break
                     }
                     
                     // Stop if next line is another character name
-                    if isCharacterLine(nextLine) {
+                    // But ignore lines that look like sound effects in all caps or action in all caps that isn't a character
+                    let isSound = trimmedNextLine.contains("!") || 
+                                 trimmedNextLine.contains("BAAM") || 
+                                 trimmedNextLine.contains("BOOM") ||
+                                 trimmedNextLine.contains("CRASH") ||
+                                 trimmedNextLine.contains("BANG")
+                    
+                    let isActionLine = trimmedNextLine.hasSuffix("--") || 
+                                     trimmedNextLine.contains("--") || 
+                                     trimmedNextLine.count > 35
+                    
+                    if isCharacterLine(nextLine) && !isSound && !isActionLine {
                         break
                     }
                     
@@ -543,7 +581,8 @@ trying to appear calm) paces while checking her phone.
                     // Like: "MIKE (20s, software engineer, disheveled) rushes in"
                     let containsCharacterDescription = 
                         trimmedNextLine.range(of: "[A-Z]{2,}\\s*\\([^\\)]+\\)", options: .regularExpression) != nil &&
-                        trimmedNextLine.lowercased() != trimmedNextLine
+                        trimmedNextLine.lowercased() != trimmedNextLine &&
+                        !isActionLine // Make sure it's not an action line with a description
                     
                     // Stop if line looks like a scene heading
                     let isSceneHeadingLine = 
@@ -609,21 +648,38 @@ trying to appear calm) paces while checking her phone.
         // Character name criteria:
         // 1. All caps (traditional screenplay format)
         let isAllCaps = trimmedLine == trimmedLine.uppercased() && 
-                        trimmedLine.range(of: "^[A-Z0-9 .,'()\\-]+$", options: .regularExpression) != nil
+                        trimmedLine.range(of: "^[A-Z0-9 .,'()\\-#]+$", options: .regularExpression) != nil
         
         // 2. Length is reasonable for a name (not too long, not too short)
         let hasReasonableLength = trimmedLine.count >= 2 && trimmedLine.count <= 35
         
         // 3. Either has centering spaces (traditional format) or is a standalone name (PDF format)
         let hasLeadingSpaces = line.contains("         ") // Multiple spaces indicating centering in hardcoded format
-        let isPotentialCharName = !trimmedLine.contains(".") || 
+        
+        // 4. More flexible character name detection for PDF formats
+        // Allow names like "PIG NOSE #1" with numbers and symbols
+        let isPotentialCharName = (!trimmedLine.contains(".") && !trimmedLine.contains("--")) || 
                                  (trimmedLine.contains("(") && trimmedLine.contains(")"))
+        
+        // List of words/phrases that are commonly mistaken as character names
+        let nonCharacterPhrases = [
+            "FADE IN", "FADE OUT", "CUT TO", "DISSOLVE TO", "SMASH CUT", 
+            "MATCH CUT", "INTERCUT", "TITLE", "SUPER", "MONTAGE", 
+            "FLASHBACK", "END FLASHBACK", "DREAM SEQUENCE", "END DREAM",
+            "CONTINUOUS", "SAME", "LATER", "MOMENTS LATER", "THAT NIGHT",
+            "VERY FAST", "POV", "ANGLE ON", "CLOSE UP", "WIDE SHOT"
+        ]
+        
+        let containsNonCharacterPhrase = nonCharacterPhrases.contains { phrase in 
+            trimmedLine.contains(phrase)
+        }
         
         // Combine criteria - either properly centered or PDF-style all caps name
         let isHardcodedFormat = hasLeadingSpaces && isAllCaps && hasReasonableLength
         let isPDFFormat = isAllCaps && hasReasonableLength && isPotentialCharName && 
                          !trimmedLine.starts(with: "INT") && !trimmedLine.starts(with: "EXT") &&
-                         !trimmedLine.starts(with: "FADE")
+                         !trimmedLine.starts(with: "FADE") && !containsNonCharacterPhrase &&
+                         !trimmedLine.hasSuffix("--") && !trimmedLine.hasSuffix("HERE--")
         
         // Debug info
         if isAllCaps && hasReasonableLength && !hasLeadingSpaces && !isPDFFormat {
