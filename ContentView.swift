@@ -69,7 +69,7 @@ struct ContentView: View {
                     if isProcessing {
                         ProcessingView(progress: progress)
                     } else if let summary = screenplaySummary {
-                        ScreenplaySummaryView(summary: summary, saveAction: saveExtractedText)
+                 
                     } else {
                         FileSelectionView(
                             selectPDFAction: {
@@ -185,12 +185,12 @@ struct ContentView: View {
         }
         
         // Parse screenplay structure
-        let summary = ScreenplayParser.parseScreenplay(text: fullText)
+        //let summary = ScreenplayParser.parseScreenplay(text: fullText)
         
         await MainActor.run {
             isProcessing = false
             extractedText = fullText
-            screenplaySummary = summary
+            //screenplaySummary = summary
         }
     }
     

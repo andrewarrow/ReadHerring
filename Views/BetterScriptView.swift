@@ -10,12 +10,26 @@ struct ScriptParserView: View {
     @State private var showingVoiceSelection = false
     @State private var selectedVoiceId: String? = nil
     @State private var currentCharacter: String = ""
+    @State private var showingDocumentPicker = false
+    @State private var selectedPDFPath: URL?
     
     var body: some View {
         VStack {
-            Text("Script Parser")
-                .font(.largeTitle)
-                .padding()
+            HStack {
+                Text("Script Parser")
+                    .font(.largeTitle)
+                    .padding()
+                
+                Spacer()
+                
+                Button(action: {
+                    showingDocumentPicker = true
+                }) {
+                    Image(systemName: "doc.fill.badge.plus")
+                        .font(.title2)
+                        .padding()
+                }
+            }
             
             if isLoading {
                 ProgressView("Loading PDF...")
@@ -101,6 +115,16 @@ struct ScriptParserView: View {
                     }
                 }
         }
+        .sheet(isPresented: $showingDocumentPicker) {
+            DocumentPickerUI(onDocumentPicked: { url in
+                // Reset view state
+                isLoading = true
+                selectedPDFPath = url
+                
+                // Process the selected PDF
+                loadPDFContent(from: url)
+            })
+        }
         .onChange(of: currentSectionIndex) { _ in
             // Speak the text when navigating between sections
             speakCurrentSection()
@@ -158,22 +182,33 @@ struct ScriptParserView: View {
         AVSpeechSynthesizer.shared.speak(utterance)
     }
     
-    private func loadPDFContent() {
+    private func loadPDFContent(from customURL: URL? = nil) {
         print("DEBUG: Starting PDF content loading...")
         // Get document directory URL
         let fileManager = FileManager.default
         let documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let pdfURL = documentsDirectory.appendingPathComponent("fade.pdf")
         
-        print("DEBUG: Looking for PDF at \(pdfURL.path)")
-        // If PDF doesn't exist in Documents directory, look in the bundle
-        if !fileManager.fileExists(atPath: pdfURL.path),
-           let bundleURL = Bundle.main.url(forResource: "fade", withExtension: "pdf") {
-            do {
-                try fileManager.copyItem(at: bundleURL, to: pdfURL)
-                print("DEBUG: Copied PDF from bundle to \(pdfURL.path)")
-            } catch {
-                print("DEBUG: Failed to copy PDF from bundle: \(error.localizedDescription)")
+        // Determine which PDF to load
+        var pdfURL: URL
+        
+        if let customURL = customURL {
+            // Use the provided custom URL
+            pdfURL = customURL
+            print("DEBUG: Using custom PDF at \(pdfURL.path)")
+        } else {
+            // Use the default PDF path
+            pdfURL = documentsDirectory.appendingPathComponent("fade.pdf")
+            
+            print("DEBUG: Looking for PDF at \(pdfURL.path)")
+            // If default PDF doesn't exist in Documents directory, look in the bundle
+            if !fileManager.fileExists(atPath: pdfURL.path),
+               let bundleURL = Bundle.main.url(forResource: "fade", withExtension: "pdf") {
+                do {
+                    try fileManager.copyItem(at: bundleURL, to: pdfURL)
+                    print("DEBUG: Copied PDF from bundle to \(pdfURL.path)")
+                } catch {
+                    print("DEBUG: Failed to copy PDF from bundle: \(error.localizedDescription)")
+                }
             }
         }
         

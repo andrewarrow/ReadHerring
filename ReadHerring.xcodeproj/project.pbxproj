@@ -15,8 +15,6 @@
 		001E37672DBE8DBC00CFB28E /* ProcessingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37612DBE8DBC00CFB28E /* ProcessingView.swift */; };
 		001E37682DBE8DBC00CFB28E /* PDFProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E375C2DBE8DBC00CFB28E /* PDFProcessor.swift */; };
 		001E37692DBE8DBC00CFB28E /* DocumentPickerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E375B2DBE8DBC00CFB28E /* DocumentPickerViewController.swift */; };
-		001E376A2DBE8DBC00CFB28E /* ScreenplayParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E375D2DBE8DBC00CFB28E /* ScreenplayParser.swift */; };
-		001E376B2DBE8DBC00CFB28E /* ScreenplaySummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37622DBE8DBC00CFB28E /* ScreenplaySummaryView.swift */; };
 		001E376C2DBE8DBC00CFB28E /* ScreenplaySummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37592DBE8DBC00CFB28E /* ScreenplaySummary.swift */; };
 		001E376D2DBE8DBC00CFB28E /* Scene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37582DBE8DBC00CFB28E /* Scene.swift */; };
 		001E376E2DBE8DBC00CFB28E /* Views in Sources */ = {isa = PBXBuildFile; fileRef = 001E37632DBE8DBC00CFB28E /* Views */; };
@@ -30,12 +28,11 @@
 		001E377E2DBECF1600CFB28E /* CastFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E377A2DBECF1600CFB28E /* CastFilter.swift */; };
 		001E377F2DBECF1600CFB28E /* CastImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E377B2DBECF1600CFB28E /* CastImage.swift */; };
 		001E37812DBED47400CFB28E /* DocumentPickerDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37802DBED47400CFB28E /* DocumentPickerDelegate.swift */; };
-		001E37852DBEDE6500CFB28E /* ReadAlongView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37842DBEDE6500CFB28E /* ReadAlongView.swift */; };
 		001E37872DBEDF1600CFB28E /* fade.pdf in Resources */ = {isa = PBXBuildFile; fileRef = 001E37862DBEDF1600CFB28E /* fade.pdf */; };
-		001E378A2DBEE86900CFB28E /* ReadAlongNavigationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37882DBEE86900CFB28E /* ReadAlongNavigationView.swift */; };
 		001E379F2DBFC36C00CFB28E /* BetterScriptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E379E2DBFC36C00CFB28E /* BetterScriptView.swift */; };
 		001E37A12DBFD80200CFB28E /* CharacterVoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37A02DBFD80200CFB28E /* CharacterVoice.swift */; };
 		001E37A32DBFD80800CFB28E /* VoiceSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37A22DBFD80800CFB28E /* VoiceSelectionView.swift */; };
+		001E37A52DBFE27500CFB28E /* DocumentPickerUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37A42DBFE27500CFB28E /* DocumentPickerUI.swift */; };
 		AA0000000000000000000001 /* ReadHerringApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000011 /* ReadHerringApp.swift */; };
 		AA0000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000012 /* ContentView.swift */; };
 /* End PBXBuildFile section */
@@ -48,11 +45,9 @@
 		001E37592DBE8DBC00CFB28E /* ScreenplaySummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenplaySummary.swift; sourceTree = "<group>"; };
 		001E375B2DBE8DBC00CFB28E /* DocumentPickerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentPickerViewController.swift; sourceTree = "<group>"; };
 		001E375C2DBE8DBC00CFB28E /* PDFProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFProcessor.swift; sourceTree = "<group>"; };
-		001E375D2DBE8DBC00CFB28E /* ScreenplayParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenplayParser.swift; sourceTree = "<group>"; };
 		001E375F2DBE8DBC00CFB28E /* FileSelectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileSelectionView.swift; sourceTree = "<group>"; };
 		001E37602DBE8DBC00CFB28E /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		001E37612DBE8DBC00CFB28E /* ProcessingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessingView.swift; sourceTree = "<group>"; };
-		001E37622DBE8DBC00CFB28E /* ScreenplaySummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenplaySummaryView.swift; sourceTree = "<group>"; };
 		001E376E2DBEA8A200CFB28E /* VoicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicesView.swift; sourceTree = "<group>"; };
 		001E37702DBECEFF00CFB28E /* CastImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastImageView.swift; sourceTree = "<group>"; };
 		001E37712DBECEFF00CFB28E /* CastView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastView.swift; sourceTree = "<group>"; };
@@ -63,12 +58,11 @@
 		001E377B2DBECF1600CFB28E /* CastImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastImage.swift; sourceTree = "<group>"; };
 		001E377C2DBECF1600CFB28E /* VoicePreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicePreferences.swift; sourceTree = "<group>"; };
 		001E37802DBED47400CFB28E /* DocumentPickerDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentPickerDelegate.swift; sourceTree = "<group>"; };
-		001E37842DBEDE6500CFB28E /* ReadAlongView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadAlongView.swift; sourceTree = "<group>"; };
 		001E37862DBEDF1600CFB28E /* fade.pdf */ = {isa = PBXFileReference; lastKnownFileType = image.pdf; path = fade.pdf; sourceTree = "<group>"; };
-		001E37882DBEE86900CFB28E /* ReadAlongNavigationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadAlongNavigationView.swift; sourceTree = "<group>"; };
 		001E379E2DBFC36C00CFB28E /* BetterScriptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BetterScriptView.swift; sourceTree = "<group>"; };
 		001E37A02DBFD80200CFB28E /* CharacterVoice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CharacterVoice.swift; sourceTree = "<group>"; };
 		001E37A22DBFD80800CFB28E /* VoiceSelectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSelectionView.swift; sourceTree = "<group>"; };
+		001E37A42DBFE27500CFB28E /* DocumentPickerUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentPickerUI.swift; sourceTree = "<group>"; };
 		AA0000000000000000000010 /* ReadHerring.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ReadHerring.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000011 /* ReadHerringApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadHerringApp.swift; sourceTree = "<group>"; };
 		AA0000000000000000000012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -106,7 +100,6 @@
 				001E37802DBED47400CFB28E /* DocumentPickerDelegate.swift */,
 				001E375B2DBE8DBC00CFB28E /* DocumentPickerViewController.swift */,
 				001E375C2DBE8DBC00CFB28E /* PDFProcessor.swift */,
-				001E375D2DBE8DBC00CFB28E /* ScreenplayParser.swift */,
 			);
 			path = Utils;
 			sourceTree = "<group>";
@@ -114,10 +107,9 @@
 		001E37632DBE8DBC00CFB28E /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				001E37A42DBFE27500CFB28E /* DocumentPickerUI.swift */,
 				001E37A22DBFD80800CFB28E /* VoiceSelectionView.swift */,
 				001E379E2DBFC36C00CFB28E /* BetterScriptView.swift */,
-				001E37882DBEE86900CFB28E /* ReadAlongNavigationView.swift */,
-				001E37842DBEDE6500CFB28E /* ReadAlongView.swift */,
 				001E37702DBECEFF00CFB28E /* CastImageView.swift */,
 				001E37712DBECEFF00CFB28E /* CastView.swift */,
 				001E37722DBECEFF00CFB28E /* FilterOptionView.swift */,
@@ -127,7 +119,6 @@
 				001E375F2DBE8DBC00CFB28E /* FileSelectionView.swift */,
 				001E37602DBE8DBC00CFB28E /* OnboardingView.swift */,
 				001E37612DBE8DBC00CFB28E /* ProcessingView.swift */,
-				001E37622DBE8DBC00CFB28E /* ScreenplaySummaryView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -235,7 +226,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA0000000000000000000002 /* ContentView.swift in Sources */,
-				001E378A2DBEE86900CFB28E /* ReadAlongNavigationView.swift in Sources */,
 				001E37A32DBFD80800CFB28E /* VoiceSelectionView.swift in Sources */,
 				001E37642DBE8DBC00CFB28E /* FileSelectionView.swift in Sources */,
 				001E37652DBE8DBC00CFB28E /* OnboardingView.swift in Sources */,
@@ -250,17 +240,15 @@
 				001E376F2DBEA8A200CFB28E /* VoicesView.swift in Sources */,
 				001E37682DBE8DBC00CFB28E /* PDFProcessor.swift in Sources */,
 				001E37692DBE8DBC00CFB28E /* DocumentPickerViewController.swift in Sources */,
-				001E376A2DBE8DBC00CFB28E /* ScreenplayParser.swift in Sources */,
-				001E376B2DBE8DBC00CFB28E /* ScreenplaySummaryView.swift in Sources */,
 				001E37812DBED47400CFB28E /* DocumentPickerDelegate.swift in Sources */,
 				001E37A12DBFD80200CFB28E /* CharacterVoice.swift in Sources */,
 				001E376C2DBE8DBC00CFB28E /* ScreenplaySummary.swift in Sources */,
+				001E37A52DBFE27500CFB28E /* DocumentPickerUI.swift in Sources */,
 				001E376D2DBE8DBC00CFB28E /* Scene.swift in Sources */,
 				001E377D2DBECF1600CFB28E /* VoicePreferences.swift in Sources */,
 				001E377E2DBECF1600CFB28E /* CastFilter.swift in Sources */,
 				001E377F2DBECF1600CFB28E /* CastImage.swift in Sources */,
 				001E376E2DBE8DBC00CFB28E /* Views in Sources */,
-				001E37852DBEDE6500CFB28E /* ReadAlongView.swift in Sources */,
 				AA0000000000000000000001 /* ReadHerringApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

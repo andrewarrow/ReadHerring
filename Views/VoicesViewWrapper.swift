@@ -231,16 +231,7 @@ struct VoicesViewWrapper: View {
         if !fullText.isEmpty {
             print("Extracted \(fullText.count) characters of text from PDF")
             
-            // Parse the text into a screenplay
-            let screenplay = ScreenplayParser.parseScreenplay(text: fullText)
-            
-            // Use the scenes from the screenplay
-            if !screenplay.scenes.isEmpty {
-                print("Extracted \(screenplay.scenes.count) scenes from PDF")
-                return screenplay.scenes
-            } else {
-                print("No scenes found in parsed screenplay")
-            }
+
         } else {
             print("No text extracted from PDF")
         }
