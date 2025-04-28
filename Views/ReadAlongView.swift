@@ -66,7 +66,7 @@ struct ReadAlongView: View {
     private let speechCoordinator = SpeechSynthesizerCoordinator()
     
     // Special narrator name for scene headings and descriptions
-    private let narratorName = "NARRATOR"
+    private let narratorName = ScreenplayParser.narratorName // Use the shared value
     
     // Custom initializer to handle the State property
     init(pdfURL: URL, scenes: [Scene]) {
@@ -239,9 +239,6 @@ struct ReadAlongView: View {
             }
         }
         .onAppear {
-            // Process scenes to ensure they have heading and description dialogs
-            processScenes()
-            
             // Assign voices to characters and narrator
             assignVoices()
             
@@ -341,159 +338,6 @@ struct ReadAlongView: View {
         }
     }
     
-    // This function isn't needed anymore since we're highlighting text directly on the PDF
-    // Kept for reference, but can be removed later
-    @ViewBuilder
-    private func dialogBox(for dialog: Scene.Dialog) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            // Check if this is narrator content (scene heading or description)
-            if isNarrationDialog(dialog) {
-                // For narration, check if it contains character descriptions
-                // and format accordingly
-                if dialog.text.contains("(") && containsCharacterName(dialog.text) {
-                    // This is likely a character description, format it specially
-                    formatCharacterDescription(dialog.text)
-                } else if dialog.text == dialog.text.uppercased() {
-                    // This is a scene heading (ALL CAPS)
-                    Text(dialog.text)
-                        .italic()
-                        .foregroundColor(.blue)
-                        .font(.headline)
-                } else {
-                    // Regular narration
-                    Text(dialog.text)
-                        .italic()
-                        .foregroundColor(.gray)
-                        .font(.body)
-                }
-            } else {
-                // Handle character dialog with stage directions
-                ForEach(splitTextForDisplay(dialog.text), id: \.self) { part in
-                    if part.hasPrefix("[") && part.hasSuffix("]") {
-                        // This is a stage direction
-                        Text(part)
-                            .italic()
-                            .foregroundColor(.gray)
-                    } else {
-                        // Regular dialog text
-                        Text(part)
-                            .foregroundColor(.black)
-                    }
-                }
-            }
-        }
-        .padding()
-        .background(Color.white)
-        .border(Color.black, width: isNarrationDialog(dialog) ? 0 : 1)
-        .cornerRadius(4)
-        .frame(maxWidth: 500)
-        .background(isNarrationDialog(dialog) ? Color.black.opacity(0.05) : Color.white)
-    }
-    
-    // Check if text contains a character name (all uppercase word)
-    private func containsCharacterName(_ text: String) -> Bool {
-        let words = text.components(separatedBy: .whitespacesAndNewlines)
-        return words.contains { word in
-            let trimmed = word.trimmingCharacters(in: .punctuationCharacters)
-            return trimmed.count > 1 && trimmed == trimmed.uppercased()
-        }
-    }
-    
-    // Format text with character descriptions
-    @ViewBuilder
-    private func formatCharacterDescription(_ text: String) -> some View {
-        // Look for pattern: CHARACTER_NAME (description) action
-        let pattern = "([A-Z][A-Z\\s]+)\\s*\\(([^\\)]+)\\)\\s*(.*)"
-        
-        if let regex = try? NSRegularExpression(pattern: pattern),
-           let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: text.count)) {
-            
-            let nsString = text as NSString
-            
-            // Extract the parts
-            let characterName = match.range(at: 1).location != NSNotFound ?
-                              nsString.substring(with: match.range(at: 1)) : ""
-            
-            let description = match.range(at: 2).location != NSNotFound ?
-                            nsString.substring(with: match.range(at: 2)) : ""
-            
-            let action = match.range(at: 3).location != NSNotFound ?
-                       nsString.substring(with: match.range(at: 3)) : ""
-            
-            // Format with different styles for each part
-            VStack(alignment: .leading, spacing: 2) {
-                if !characterName.isEmpty {
-                    Text(characterName)
-                        .fontWeight(.bold)
-                        .foregroundColor(.black)
-                }
-                
-                if !description.isEmpty {
-                    Text("(\(description))")
-                        .italic()
-                        .foregroundColor(.gray)
-                }
-                
-                if !action.isEmpty {
-                    Text(action)
-                        .foregroundColor(.gray)
-                        .italic()
-                }
-            }
-        } else {
-            // Fallback for unmatched text
-            Text(text)
-                .italic()
-                .foregroundColor(.gray)
-        }
-    }
-    
-    private func splitTextForDisplay(_ text: String) -> [String] {
-        // Process stage directions for display
-        let pattern = "\\(([^\\)]*)\\)"
-        let regex = try? NSRegularExpression(pattern: pattern)
-        
-        if regex == nil {
-            return [text]
-        }
-        
-        let nsString = text as NSString
-        let matches = regex!.matches(in: text, range: NSRange(location: 0, length: nsString.length))
-        
-        if matches.isEmpty {
-            return [text]
-        }
-        
-        var result: [String] = []
-        var lastEndIndex = 0
-        
-        for match in matches {
-            // Add text before the stage direction if there is any
-            if match.range.location > lastEndIndex {
-                let normalText = nsString.substring(with: NSRange(location: lastEndIndex, length: match.range.location - lastEndIndex))
-                if !normalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    result.append(normalText)
-                }
-            }
-            
-            // Add the stage direction with brackets
-            let direction = nsString.substring(with: match.range(at: 1))
-            result.append("[\(direction)]")
-            
-            lastEndIndex = match.range.location + match.range.length
-        }
-        
-        // Add any remaining text after the last stage direction
-        if lastEndIndex < nsString.length {
-            let remainingText = nsString.substring(from: lastEndIndex)
-            if !remainingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                result.append(remainingText)
-            }
-        }
-        
-        return result
-    }
-    
     private func assignVoices() {
         // Get all available voices
         let allVoices = AVSpeechSynthesisVoice.speechVoices()
@@ -567,7 +411,14 @@ struct ReadAlongView: View {
     }
     
     private func readCurrentDialog() {
-        guard let dialog = currentDialog else { return }
+        print("DEBUG ReadAlongView: Reading current dialog")
+        guard let dialog = currentDialog else {
+            print("DEBUG ReadAlongView: No current dialog to read")
+            return
+        }
+        
+        print("DEBUG ReadAlongView: Current dialog - Scene: \(currentSceneIndex), Dialog: \(currentDialogIndex)")
+        print("DEBUG ReadAlongView: Character: \(dialog.character), Text: \(dialog.text.prefix(100))...")
         
         // Clean text by removing stage directions (text in parentheses)
         let cleanText = dialog.text.replacingOccurrences(
@@ -576,8 +427,11 @@ struct ReadAlongView: View {
             options: .regularExpression
         ).trimmingCharacters(in: .whitespacesAndNewlines)
         
+        print("DEBUG ReadAlongView: Cleaned text length: \(cleanText.count) chars")
+        
         // Skip if nothing to read
         if cleanText.isEmpty { 
+            print("DEBUG ReadAlongView: Empty text after cleaning, moving to next")
             // Move to the next dialog if this one is empty
             moveToNext()
             return 
@@ -591,9 +445,11 @@ struct ReadAlongView: View {
         
         // Get the appropriate voice based on content type
         if isNarrationDialog(dialog) {
+            print("DEBUG ReadAlongView: Using narrator voice")
             // Use narrator voice for scene headings and descriptions
             utterance.voice = characterVoices[narratorName] ?? narrationVoice
         } else {
+            print("DEBUG ReadAlongView: Using character voice for \(dialog.character)")
             // Use character-specific voice for dialog
             if let voice = characterVoices[dialog.character] {
                 utterance.voice = voice
@@ -633,220 +489,36 @@ struct ReadAlongView: View {
     
     // Helper to determine if a dialog should be read by the narrator
     private func isNarrationDialog(_ dialog: Scene.Dialog) -> Bool {
-        // Scene headings and descriptions should be read by narrator
-        // Check if this is a scene heading or description (not character dialog)
-        return dialog.character == narratorName || 
-               dialog.character == "HEADING" || 
-               dialog.character == "DESCRIPTION" ||
-               dialog.character.contains("SCENE")
-    }
-    
-    // Process scenes to properly structure screenplay content
-    private func processScenes() {
-        // Create new array for processed scenes
-        var processedScenes = [Scene]()
-        
-        // Extract titles and credts
-        let titleCredits = findTitleAndCredits()
-        
-        // Process each scene individually
-        for sceneIndex in 0..<scenes.count {
-            let originalScene = scenes[sceneIndex]
-            
-            // Create a new scene to work with
-            let newScene = Scene(
-                heading: originalScene.heading,
-                description: originalScene.description,
-                location: originalScene.location,
-                timeOfDay: originalScene.timeOfDay,
-                sceneNumber: originalScene.sceneNumber
-            )
-            
-            // Storage for organized dialogs
-            var sequencedDialogs: [Scene.Dialog] = []
-            
-            // 1. If this is the first scene, add title/credits
-            if sceneIndex == 0 && !titleCredits.isEmpty {
-                sequencedDialogs.append(Scene.Dialog(character: narratorName, text: titleCredits))
-            }
-            
-            // 2. Add scene heading as a separate narrator dialog (just once)
-            if !originalScene.heading.isEmpty {
-                sequencedDialogs.append(Scene.Dialog(character: narratorName, text: originalScene.heading))
-            }
-            
-            // 3. Extract and add scene description (general atmosphere and setting)
-            var sceneDescriptionAdded = false
-            
-            // Regular expression for finding character descriptions
-            let characterPattern = "([A-Z][A-Z\\s]+)\\s*\\(([^\\)]+)\\)\\s+(.+)"
-            let characterRegex = try? NSRegularExpression(pattern: characterPattern)
-            
-            // Extract the main scene description without character descriptions
-            if !originalScene.description.isEmpty {
-                // Split into paragraphs for better reading
-                let paragraphs = originalScene.description.components(separatedBy: "\n\n")
-                
-                for paragraph in paragraphs.prefix(1) {  // Only process the first paragraph as general description
-                    let trimmed = paragraph.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !trimmed.isEmpty {
-                        // Check if paragraph is a character description
-                        if let regex = characterRegex, 
-                           regex.firstMatch(in: trimmed, range: NSRange(location: 0, length: trimmed.count)) != nil {
-                            // This contains character info - skip it here
-                        } else {
-                            // This is general scene description
-                            sequencedDialogs.append(Scene.Dialog(character: narratorName, text: trimmed))
-                            sceneDescriptionAdded = true
-                        }
-                    }
-                }
-            }
-            
-            // 4. Build a map of character introductions from scene description
-            var characterIntros: [String: String] = [:]  // Character name -> intro text
-            
-            // Extract character descriptions from the scene description
-            let sceneText = originalScene.description
-            let sceneLines = sceneText.components(separatedBy: .newlines)
-            
-            for line in sceneLines {
-                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                if let regex = characterRegex,
-                   let match = regex.firstMatch(in: trimmed, range: NSRange(location: 0, length: trimmed.count)) {
-                    
-                    let nsLine = trimmed as NSString
-                    let charName = match.range(at: 1).location != NSNotFound ? 
-                                 nsLine.substring(with: match.range(at: 1)) : ""
-                    
-                    // Store the full line as the intro for this character
-                    characterIntros[charName] = trimmed
-                }
-            }
-            
-            // 5. Track characters who have been introduced
-            var introducedCharacters = Set<String>()
-            
-            // 6. Add dialog content in the correct sequence, introducing characters first
-            for dialog in originalScene.dialogs {
-                // Skip any existing narrator content
-                if dialog.character == narratorName || 
-                   dialog.character.contains("SCENE") ||
-                   dialog.character.contains("HEADING") ||
-                   dialog.character.contains("DESCRIPTION") {
-                    continue
-                }
-                
-                let character = dialog.character
-                let dialogText = dialog.text
-                
-                // Check if we need to introduce this character first
-                if !introducedCharacters.contains(character) {
-                    // Add the character introduction if we have one
-                    if let introText = characterIntros[character] {
-                        sequencedDialogs.append(Scene.Dialog(character: narratorName, text: introText))
-                    }
-                    introducedCharacters.insert(character)
-                }
-                
-                // Now add the character's dialog
-                // Check if the dialog contains another character's introduction
-                if let regex = characterRegex,
-                   let match = regex.firstMatch(in: dialogText, range: NSRange(location: 0, length: dialogText.count)) {
-                    
-                    // Extract the dialog part vs. character introduction part
-                    let nsText = dialogText as NSString
-                    
-                    let dialogPart = match.range.location > 0 ?
-                                   nsText.substring(with: NSRange(location: 0, length: match.range.location))
-                                        .trimmingCharacters(in: .whitespacesAndNewlines) : ""
-                    
-                    let charName = match.range(at: 1).location != NSNotFound ? 
-                                 nsText.substring(with: match.range(at: 1)) : ""
-                    
-                    // Add the character's dialog (if any)
-                    if !dialogPart.isEmpty {
-                        sequencedDialogs.append(Scene.Dialog(character: character, text: dialogPart))
-                    }
-                    
-                    // Add the character intro for the next character
-                    if !charName.isEmpty && !introducedCharacters.contains(charName) {
-                        let introText = nsText.substring(with: match.range)
-                        sequencedDialogs.append(Scene.Dialog(character: narratorName, text: introText))
-                        introducedCharacters.insert(charName)
-                    }
-                } else {
-                    // Regular dialog - add it as is
-                    sequencedDialogs.append(dialog)
-                }
-            }
-            
-            // Set our processed dialogs to the new scene
-            newScene.dialogs = sequencedDialogs
-            
-            // Add to our result list
-            processedScenes.append(newScene)
-        }
-        
-        // Update scenes with our processed version
-        scenes = processedScenes
-    }
-    
-    // Find title and credits at the beginning of the screenplay
-    private func findTitleAndCredits() -> String {
-        // Check first scene for title information
-        if scenes.isEmpty { return "" }
-        
-        let firstScene = scenes[0]
-        
-        // Look for title in description or heading
-        var titleText = ""
-        
-        // Check if first scene has "FADE IN:" or title-like content
-        if firstScene.heading.contains("FADE IN") || 
-           firstScene.heading.uppercased() == firstScene.heading {
-            titleText += firstScene.heading + "\n\n"
-        }
-        
-        // Look for typical screenplay header content in the description
-        let description = firstScene.description
-        if description.contains("WRITTEN BY") || 
-           description.contains("by") || 
-           description.contains("SCREENPLAY") {
-            
-            // Extract just the first part of the description that might contain title info
-            let lines = description.components(separatedBy: .newlines)
-            var titleLines: [String] = []
-            
-            // Take lines until we hit something that looks like scene content
-            for line in lines {
-                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                if trimmed.isEmpty { continue }
-                
-                // Stop when we hit typical scene content
-                if trimmed.contains("INT.") || trimmed.contains("EXT.") || 
-                   trimmed.contains("INTERIOR") || trimmed.contains("EXTERIOR") {
-                    break
-                }
-                
-                titleLines.append(trimmed)
-            }
-            
-            if !titleLines.isEmpty {
-                titleText += titleLines.joined(separator: "\n")
-            }
-        }
-        
-        return titleText
+        // Simple check if this dialog belongs to the narrator
+        return dialog.character == narratorName
     }
     
     private func moveToPrevious() {
+        print("DEBUG ReadAlongView: Moving to previous dialog")
+        print("DEBUG ReadAlongView: Before move - Scene: \(currentSceneIndex), Dialog: \(currentDialogIndex)")
+        
         if currentDialogIndex > 0 {
+            print("DEBUG ReadAlongView: Moving to previous dialog in same scene")
             currentDialogIndex -= 1
         } else if currentSceneIndex > 0 {
+            print("DEBUG ReadAlongView: Moving to previous scene")
             currentSceneIndex -= 1
+            
             if let scene = currentScene {
                 currentDialogIndex = max(0, scene.dialogs.count - 1)
+                print("DEBUG ReadAlongView: Previous scene has \(scene.dialogs.count) dialogs, setting index to \(currentDialogIndex)")
+            }
+        } else {
+            print("DEBUG ReadAlongView: Already at first dialog of first scene")
+        }
+        
+        print("DEBUG ReadAlongView: After move - Scene: \(currentSceneIndex), Dialog: \(currentDialogIndex)")
+        
+        // Dump current scene contents for debugging
+        if let scene = currentScene {
+            print("DEBUG ReadAlongView: Current scene dialogs:")
+            for (i, dialog) in scene.dialogs.enumerated() {
+                print("DEBUG ReadAlongView: Dialog \(i): \(dialog.character): \(dialog.text.prefix(30))...")
             }
         }
         
@@ -854,19 +526,31 @@ struct ReadAlongView: View {
     }
     
     private func moveToNext() {
+        print("DEBUG ReadAlongView: Moving to next dialog")
+        print("DEBUG ReadAlongView: Before move - Scene: \(currentSceneIndex), Dialog: \(currentDialogIndex)")
+        
         if let scene = currentScene, currentDialogIndex < scene.dialogs.count - 1 {
+            print("DEBUG ReadAlongView: Moving to next dialog in same scene")
             currentDialogIndex += 1
         } else if currentSceneIndex < scenes.count - 1 {
+            print("DEBUG ReadAlongView: Moving to next scene")
             currentSceneIndex += 1
             currentDialogIndex = 0
+            
+            if let scene = currentScene {
+                print("DEBUG ReadAlongView: Next scene has \(scene.dialogs.count) dialogs")
+            }
+        } else {
+            print("DEBUG ReadAlongView: Already at last dialog of last scene")
         }
         
-        // Print debug info
+        print("DEBUG ReadAlongView: After move - Scene: \(currentSceneIndex), Dialog: \(currentDialogIndex)")
+        
+        // Dump current scene contents for debugging
         if let scene = currentScene {
-            print("Moving to Scene \(currentSceneIndex + 1) of \(scenes.count), Dialog \(currentDialogIndex + 1) of \(scene.dialogs.count)")
-            if let dialog = currentDialog {
-                let shortText = dialog.text.count > 50 ? dialog.text.prefix(50) + "..." : dialog.text
-                print("Character: \(dialog.character), Text: \(shortText)")
+            print("DEBUG ReadAlongView: Current scene dialogs:")
+            for (i, dialog) in scene.dialogs.enumerated() {
+                print("DEBUG ReadAlongView: Dialog \(i): \(dialog.character): \(dialog.text.prefix(30))...")
             }
         }
         
@@ -951,7 +635,7 @@ struct ReadAlongView: View {
     }
 }
 
-// Wrapper for UIKit's PDFView with text highlighting
+// Wrapper for UIKit's PDFView with improved text highlighting
 struct PDFViewWrapper: UIViewRepresentable {
     let pdfURL: URL
     let currentDialogText: String
@@ -960,74 +644,172 @@ struct PDFViewWrapper: UIViewRepresentable {
     class Coordinator: NSObject {
         var parent: PDFViewWrapper
         var highlightAnnotation: PDFAnnotation?
-        var selectionPaths: [UIBezierPath] = []
+        var lastHighlightedText: String = ""
         
         init(parent: PDFViewWrapper) {
             self.parent = parent
         }
         
-        // Create highlight rectangles around text
+        // Create highlight for text, with improved search algorithm
         func highlightText(_ text: String, in pdfView: PDFView) {
-            guard !text.isEmpty, let pdfDocument = pdfView.document else { return }
-            
-            // Remove any existing highlight
-            if let highlight = highlightAnnotation, let page = highlight.page {
-                page.removeAnnotation(highlight)
-                highlightAnnotation = nil
+            print("DEBUG PDFViewWrapper: Highlighting text: \(text.prefix(100))...")
+            guard !text.isEmpty, let pdfDocument = pdfView.document else {
+                print("DEBUG PDFViewWrapper: Cannot highlight - empty text or no document")
+                return
             }
             
-            // Search for text in PDF
+            // Clean up text for better matching
             let cleanText = text.replacingOccurrences(of: "\\(.*?\\)", with: "", options: .regularExpression)
-                                .trimmingCharacters(in: .whitespacesAndNewlines)
+                             .trimmingCharacters(in: .whitespacesAndNewlines)
+                             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             
-            if cleanText.isEmpty { return }
+            if cleanText.isEmpty { 
+                print("DEBUG PDFViewWrapper: Text is empty after cleaning")
+                return 
+            }
             
-            // Track which page and selection we find
-            var foundPage: PDFPage?
-            var selectionRects: [CGRect] = []
+            // If we're highlighting the same text, keep the current highlight
+            if cleanText == lastHighlightedText && highlightAnnotation != nil {
+                print("DEBUG PDFViewWrapper: Same text as last highlight, keeping current highlight")
+                return
+            }
             
-            // Search each page for the text
-            for i in 0..<pdfDocument.pageCount {
-                guard let page = pdfDocument.page(at: i) else { continue }
-                let pageString = page.string ?? ""
-                
-                // Try to find the text in this page
-                if let range = pageString.range(of: cleanText, options: .caseInsensitive) {
-                    // Calculate character indices for NSRange
-                    let nsRange = NSRange(range, in: pageString)
-                    
-                    // Use PDFKit's selection from string range
-                    if let selection = page.selection(for: nsRange) {
-                        // Get bounding boxes for the selection
-                        let bounds = selection.bounds(for: page)
-                        // Save the page and bounds
-                        foundPage = page
-                        selectionRects = [bounds]
-                        
-                        // Scroll to this page and highlight the text
-                        pdfView.go(to: page)
-                        break
+            // Clear previous highlight
+            removeHighlight(from: pdfView)
+            
+            print("DEBUG PDFViewWrapper: Trying various search strategies")
+            
+            // Try to find the text in the document with different search strategies
+            
+            // Strategy 1: Direct match
+            print("DEBUG PDFViewWrapper: Strategy 1 - Direct match")
+            if !findAndHighlight(exactText: cleanText, in: pdfView, document: pdfDocument) {
+                // Strategy 2: Try searching for first 100 chars if text is long
+                if cleanText.count > 100 {
+                    print("DEBUG PDFViewWrapper: Strategy 2 - First 100 chars")
+                    let prefix = String(cleanText.prefix(100))
+                    if !findAndHighlight(exactText: prefix, in: pdfView, document: pdfDocument) {
+                        // Strategy 3: Split into sentences and try to match first sentence
+                        print("DEBUG PDFViewWrapper: Strategy 3 - First sentence")
+                        let sentences = cleanText.components(separatedBy: ". ")
+                        if sentences.count > 0 && !sentences[0].isEmpty {
+                            if !findAndHighlight(exactText: sentences[0], in: pdfView, document: pdfDocument) {
+                                // Strategy 4: Try with just the first 50 characters
+                                print("DEBUG PDFViewWrapper: Strategy 4 - First 50 chars")
+                                let shortPrefix = String(cleanText.prefix(50))
+                                findAndHighlight(exactText: shortPrefix, in: pdfView, document: pdfDocument)
+                            }
+                        }
                     }
                 }
             }
             
-            // If we found the text, highlight it
-            if let page = foundPage, !selectionRects.isEmpty {
-                // Create highlight annotation
-                let highlight = PDFAnnotation(bounds: selectionRects.first!, forType: .highlight, withProperties: nil)
-                highlight.color = UIColor.yellow.withAlphaComponent(0.3)
+            // Remember what we highlighted
+            lastHighlightedText = cleanText
+            
+            // Report if we have a highlight
+            print("DEBUG PDFViewWrapper: Highlighting successful: \(highlightAnnotation != nil)")
+        }
+        
+        // Better text finding and highlighting algorithm
+        private func findAndHighlight(exactText searchText: String, in pdfView: PDFView, document: PDFDocument) -> Bool {
+            print("DEBUG PDFViewWrapper: Searching for text: \(searchText.prefix(50))...")
+            
+            // Try several variations of the text for more reliable matching
+            let searchVariations = [
+                searchText,
+                searchText.trimmingCharacters(in: .whitespacesAndNewlines),
+                // Try removing any parenthetical content
+                searchText.replacingOccurrences(of: "\\([^\\)]+\\)", with: "", options: .regularExpression)
+                    .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                // Try with just the first part of the text (before any parentheses)
+                searchText.components(separatedBy: "(").first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? searchText
+            ]
+            
+            // Search through each page manually as PDFDocument.findString behavior has changed
+            for pageIndex in 0..<document.pageCount {
+                guard let page = document.page(at: pageIndex) else { continue }
+                guard let pageContent = page.string else { continue }
                 
-                // Create selection rectangle paths
-                selectionPaths = []
-                for rect in selectionRects {
-                    let path = UIBezierPath(rect: rect)
-                    selectionPaths.append(path)
-                    highlight.add(path)
+                print("DEBUG PDFViewWrapper: Checking page \(pageIndex+1) of \(document.pageCount)")
+                
+                // Try each variation of the search text
+                for variation in searchVariations {
+                    // Skip empty variations
+                    if variation.isEmpty { continue }
+                    
+                    // Use fuzzy matching by trying substrings
+                    let searchLengths = [
+                        variation.count,
+                        min(variation.count, 100),
+                        min(variation.count, 50),
+                        min(variation.count, 30)
+                    ]
+                    
+                    for length in searchLengths {
+                        if length < 5 { continue } // Too short to be useful
+                        
+                        let searchSubstring = String(variation.prefix(length))
+                        print("DEBUG PDFViewWrapper: Trying variation: \(searchSubstring.prefix(20))...")
+                        
+                        // Check if this page contains our text
+                        if let range = pageContent.range(of: searchSubstring, options: .caseInsensitive) {
+                            print("DEBUG PDFViewWrapper: Found text match on page \(pageIndex+1)!")
+                            
+                            // Convert to NSRange for selection
+                            let nsRange = NSRange(range, in: pageContent)
+                            
+                            // Create selection from the range
+                            if let selection = page.selection(for: nsRange) {
+                                print("DEBUG PDFViewWrapper: Created selection successfully")
+                                
+                                // Get bounds for the selection
+                                let bounds = selection.bounds(for: page)
+                                print("DEBUG PDFViewWrapper: Selection bounds: \(bounds)")
+                                
+                                // Extend the bounds a bit for better visibility
+                                let extendedBounds = CGRect(
+                                    x: bounds.origin.x - 2, 
+                                    y: bounds.origin.y - 2,
+                                    width: bounds.width + 4, 
+                                    height: bounds.height + 4
+                                )
+                                
+                                // Scroll to the selection
+                                pdfView.go(to: page)
+                                
+                                // Create a highlight annotation
+                                let highlight = PDFAnnotation(bounds: extendedBounds, forType: .highlight, withProperties: nil)
+                                highlight.color = UIColor.yellow.withAlphaComponent(0.5)
+                                
+                                // Add the path for the bounds
+                                let path = UIBezierPath(rect: extendedBounds)
+                                highlight.add(path)
+                                
+                                // Add to page and save reference
+                                page.addAnnotation(highlight)
+                                highlightAnnotation = highlight
+                                
+                                print("DEBUG PDFViewWrapper: Successfully added highlight annotation")
+                                return true
+                            } else {
+                                print("DEBUG PDFViewWrapper: Could not create selection from range")
+                            }
+                        }
+                    }
                 }
-                
-                // Add to page and save reference
-                page.addAnnotation(highlight)
-                highlightAnnotation = highlight
+            }
+            
+            print("DEBUG PDFViewWrapper: Text not found in any page")
+            return false
+        }
+        
+        // Remove existing highlight
+        func removeHighlight(from pdfView: PDFView) {
+            if let highlight = highlightAnnotation, let page = highlight.page {
+                page.removeAnnotation(highlight)
+                highlightAnnotation = nil
             }
         }
     }
@@ -1060,12 +842,18 @@ struct PDFViewWrapper: UIViewRepresentable {
     }
     
     func updateUIView(_ uiView: PDFView, context: Context) {
-        // Update PDF if URL changes
-        if let document = PDFDocument(url: pdfURL) {
-            uiView.document = document
+        // Update PDF document if URL changes
+        if let document = uiView.document, document.documentURL != pdfURL {
+            if let newDocument = PDFDocument(url: pdfURL) {
+                uiView.document = newDocument
+            }
+        } else if uiView.document == nil {
+            if let newDocument = PDFDocument(url: pdfURL) {
+                uiView.document = newDocument
+            }
         }
         
-        // Highlight the current text
+        // Highlight the current text with slight delay to ensure view is ready
         DispatchQueue.main.async {
             context.coordinator.highlightText(currentDialogText, in: uiView)
         }
