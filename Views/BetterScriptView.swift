@@ -510,9 +510,16 @@ trying to appear calm) paces while checking her phone.
                 // Extract character name
                 let characterName = trimmedLine
                 
-                // Collect dialog lines
+                // Create dialog text starting with character name
                 var dialogText = characterName + "\n"
                 i += 1
+                
+                // Check if we have dialog lines available
+                if i >= lines.count {
+                    // No dialog available - just add the character name
+                    sections.append(ScriptSection(type: .character, text: dialogText))
+                    continue
+                }
                 
                 // Check if the next line is a parenthetical
                 let hasParenthetical = i < lines.count && isParentheticalLine(lines[i])
@@ -520,6 +527,15 @@ trying to appear calm) paces while checking her phone.
                     print("DEBUG: Found parenthetical: \(lines[i])")
                     dialogText += lines[i] + "\n"
                     i += 1
+                }
+                
+                // Check if the next line is actually dialog or another character name
+                // This handles cases where character names follow each other without dialog
+                if i < lines.count && isCharacterLine(lines[i]) {
+                    // Next line is another character - no dialog for this character
+                    sections.append(ScriptSection(type: .character, text: dialogText))
+                    print("DEBUG: Added character section without dialog for \(characterName)")
+                    continue // Skip dialog collection and move to next section
                 }
                 
                 // Collect dialog content
@@ -561,19 +577,29 @@ trying to appear calm) paces while checking her phone.
                         break
                     }
                     
-                    // Stop if next line is another character name
-                    // But ignore lines that look like sound effects in all caps or action in all caps that isn't a character
+                    // Check if this is a line where we should definitely stop collecting dialog
+                    
+                    // Is this a standalone line like "PEOPLE drop." which should be its own narrative section?
+                    let isShortNarrativeLine = trimmedNextLine.count < 35 && 
+                                             trimmedNextLine == trimmedNextLine.uppercased() && 
+                                             trimmedNextLine.hasSuffix(".") &&
+                                             dialogLineCount > 0 // Only apply after we've collected at least one line of dialog
+                    
+                    // Sound effects and special emphasis words
                     let isSound = trimmedNextLine.contains("!") || 
                                  trimmedNextLine.contains("BAAM") || 
                                  trimmedNextLine.contains("BOOM") ||
                                  trimmedNextLine.contains("CRASH") ||
                                  trimmedNextLine.contains("BANG")
                     
+                    // Action lines with hyphens or very long lines
                     let isActionLine = trimmedNextLine.hasSuffix("--") || 
                                      trimmedNextLine.contains("--") || 
                                      trimmedNextLine.count > 35
                     
-                    if isCharacterLine(nextLine) && !isSound && !isActionLine {
+                    // Stop if this is clearly another character's line
+                    // But make sure it's not just a sound effect or action in all caps
+                    if (isCharacterLine(nextLine) && !isSound && !isActionLine) || isShortNarrativeLine {
                         break
                     }
                     
