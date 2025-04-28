@@ -137,26 +137,54 @@ the phone.
         // Split the text into lines for processing
         let lines = text.components(separatedBy: .newlines)
         
+        // Track if we've seen a scene heading (INT./EXT.) and dialog after it
+        var seenSceneHeading = false
+        var seenDialogAfterSceneHeading = false
+        
         var i = 0
         while i < lines.count {
             let line = lines[i]
+            let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
             
             // Skip empty lines at the beginning
-            if currentSectionText.isEmpty && line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if currentSectionText.isEmpty && trimmedLine.isEmpty {
                 i += 1
                 continue
             }
             
+            // Check for scene headings (INT./EXT.)
+            if !seenSceneHeading && (trimmedLine.starts(with: "INT.") || trimmedLine.starts(with: "EXT.") || trimmedLine.starts(with: "INT ") || trimmedLine.starts(with: "EXT ")) {
+                seenSceneHeading = true
+            }
+            
             // Check if this line indicates a character's dialog
             if isCharacterLine(line) {
-                // If we were building a narrator section, finish it
-                if !currentSectionText.isEmpty && currentSectionType == .narrator {
-                    sections.append(ScriptSection(type: .narrator, text: currentSectionText))
-                    currentSectionText = ""
+                // If this is the first dialog after a scene heading, finish the initial narrator section
+                if seenSceneHeading && !seenDialogAfterSceneHeading {
+                    seenDialogAfterSceneHeading = true
+                    
+                    // Add everything we've seen so far as the first narrator section
+                    if !currentSectionText.isEmpty {
+                        sections.append(ScriptSection(type: .narrator, text: currentSectionText))
+                        currentSectionText = ""
+                    }
+                } else if seenDialogAfterSceneHeading {
+                    // For subsequent dialogs, close any narrator section in progress
+                    if !currentSectionText.isEmpty && currentSectionType == .narrator {
+                        sections.append(ScriptSection(type: .narrator, text: currentSectionText))
+                        currentSectionText = ""
+                    }
+                }
+                
+                // If we haven't seen a scene heading yet, just continue accumulating into the initial narrator block
+                if !seenSceneHeading || !seenDialogAfterSceneHeading {
+                    currentSectionText += line + "\n"
+                    i += 1
+                    continue
                 }
                 
                 // Extract character name
-                let characterName = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                let characterName = trimmedLine
                 
                 // Collect dialog lines
                 var dialogText = characterName + "\n"
@@ -178,8 +206,8 @@ the phone.
                 continue // Skip the normal increment
             } else {
                 // This is part of the narrator text
-                if currentSectionType != .narrator {
-                    // Start a new narrator section
+                if currentSectionType != .narrator && seenDialogAfterSceneHeading {
+                    // Start a new narrator section (only after we've started properly sectioning)
                     currentSectionText = ""
                     currentSectionType = .narrator
                 }
