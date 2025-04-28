@@ -433,12 +433,21 @@ struct ReadAlongView: View {
     private func readCurrentDialog() {
         guard let dialog = currentDialog else { return }
         
-        // Clean text by removing stage directions (text in parentheses)
-        let cleanText = dialog.text.replacingOccurrences(
-            of: "\\(.*?\\)",
-            with: "",
-            options: .regularExpression
-        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        // Get the text to read
+        var textToRead = dialog.text
+        
+        // Only clean stage directions from character dialog (not from narration)
+        if !isNarrationDialog(dialog) {
+            // Clean text by removing stage directions (text in parentheses)
+            textToRead = dialog.text.replacingOccurrences(
+                of: "\\(.*?\\)",
+                with: "",
+                options: .regularExpression
+            )
+        }
+        
+        // Final cleanup
+        let cleanText = textToRead.trimmingCharacters(in: .whitespacesAndNewlines)
         
         // Skip if nothing to read
         if cleanText.isEmpty { 
@@ -446,6 +455,9 @@ struct ReadAlongView: View {
             moveToNext()
             return 
         }
+        
+        // Print debug for current dialog
+        print("Reading: [\(dialog.character)] \(cleanText.prefix(50))...")
         
         // Stop any ongoing speech
         speechSynthesizer.stopSpeaking(at: .immediate)
@@ -457,6 +469,15 @@ struct ReadAlongView: View {
         if isNarrationDialog(dialog) {
             // Use narrator voice for scene headings and descriptions
             utterance.voice = characterVoices[narratorName] ?? narrationVoice
+            
+            // Make scene headings stand out a bit
+            if dialog.text == dialog.text.uppercased() && (dialog.text.contains("INT.") || dialog.text.contains("EXT.")) {
+                utterance.pitchMultiplier = 1.1
+                utterance.rate = 0.45
+            } else {
+                utterance.pitchMultiplier = 1.0
+                utterance.rate = 0.5
+            }
         } else {
             // Use character-specific voice for dialog
             if let voice = characterVoices[dialog.character] {
@@ -465,11 +486,13 @@ struct ReadAlongView: View {
                 // Fallback to narrator voice if character voice not found
                 utterance.voice = narrationVoice
             }
+            
+            // Standard rate for character dialog
+            utterance.rate = 0.5
+            utterance.pitchMultiplier = 1.0
         }
         
-        // Adjust speech properties
-        utterance.rate = 0.5
-        utterance.pitchMultiplier = 1.0
+        // Adjust common speech properties
         utterance.volume = 1.0
         
         // The speaking state will be updated by the delegate
@@ -535,7 +558,8 @@ struct ReadAlongView: View {
             }
             
             // 2. Add scene heading as a separate narrator dialog (just once)
-            if !originalScene.heading.isEmpty {
+            // Only add if it's not already in titleCredits to avoid duplication
+            if !originalScene.heading.isEmpty && !titleCredits.contains(originalScene.heading) {
                 sequencedDialogs.append(Scene.Dialog(character: narratorName, text: originalScene.heading))
             }
             
@@ -551,15 +575,16 @@ struct ReadAlongView: View {
                 // Split into paragraphs for better reading
                 let paragraphs = originalScene.description.components(separatedBy: "\n\n")
                 
-                for paragraph in paragraphs.prefix(1) {  // Only process the first paragraph as general description
+                // Process ALL paragraphs of the scene description
+                for paragraph in paragraphs {
                     let trimmed = paragraph.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !trimmed.isEmpty {
                         // Check if paragraph is a character description
                         if let regex = characterRegex, 
                            regex.firstMatch(in: trimmed, range: NSRange(location: 0, length: trimmed.count)) != nil {
-                            // This contains character info - skip it here
+                            // Character descriptions will be handled before their dialog
                         } else {
-                            // This is general scene description
+                            // This is general scene description - the narrator should read it
                             sequencedDialogs.append(Scene.Dialog(character: narratorName, text: trimmed))
                             sceneDescriptionAdded = true
                         }
@@ -591,8 +616,27 @@ struct ReadAlongView: View {
             // 5. Track characters who have been introduced
             var introducedCharacters = Set<String>()
             
-            // 6. Add dialog content in the correct sequence, introducing characters first
-            for dialog in originalScene.dialogs {
+            // Helper function to check if text contains uppercase words (character names)
+            func containsUppercaseWord(_ text: String) -> Bool {
+                let words = text.components(separatedBy: .whitespacesAndNewlines)
+                return words.contains { word in
+                    let trimmed = word.trimmingCharacters(in: .punctuationCharacters)
+                    return trimmed.count > 1 && trimmed == trimmed.uppercased() && trimmed != "INT." && trimmed != "EXT."
+                }
+            }
+            
+            // Map to track which dialog entries should be skipped (e.g., narrative actions already processed)
+            var skipDialogIndices = Set<Int>()
+            
+            // 6. Process all dialogs and identify narrative sections
+            for dialogIndex in 0..<originalScene.dialogs.count {
+                // Skip if this dialog was already processed
+                if skipDialogIndices.contains(dialogIndex) {
+                    continue
+                }
+                
+                let dialog = originalScene.dialogs[dialogIndex]
+                
                 // Skip any existing narrator content
                 if dialog.character == narratorName || 
                    dialog.character.contains("SCENE") ||
@@ -643,6 +687,48 @@ struct ReadAlongView: View {
                     // Regular dialog - add it as is
                     sequencedDialogs.append(dialog)
                 }
+                
+                // Check if next lines contain narrative action
+                // Look ahead in the dialog collection to find narrative actions
+                if dialogIndex + 1 < originalScene.dialogs.count {
+                    var lookAheadIndex = dialogIndex + 1
+                    
+                    while lookAheadIndex < originalScene.dialogs.count {
+                        let nextDialog = originalScene.dialogs[lookAheadIndex]
+                        
+                        // Stop looking if we hit another character's dialog
+                        if nextDialog.character != character && !nextDialog.character.contains("(CONT'D)") &&
+                           !nextDialog.character.contains(character) {
+                            
+                            // Check if this is a narrative action/description, not dialog
+                            let nextText = nextDialog.text
+                            
+                            // Criteria for narrative action:
+                            // 1. Contains a character name in CAPS
+                            // 2. Is not dialog (no quotes or speech indicators)
+                            // 3. Is not a dialog direction (doesn't start with parentheses)
+                            let hasCharacterName = containsUppercaseWord(nextText)
+                            let isNotDialogDirections = !nextText.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("(")
+                            let isNotSpeech = !nextText.contains("\"") && !nextText.contains("says") && 
+                                             !nextText.contains("says") && !nextText.contains("replies")
+                            
+                            if hasCharacterName && isNotDialogDirections && isNotSpeech {
+                                // This is a narrative action - assign to narrator
+                                sequencedDialogs.append(Scene.Dialog(character: narratorName, text: nextText))
+                                skipDialogIndices.insert(lookAheadIndex)
+                                
+                                // Step to next and see if more narrative continues
+                                lookAheadIndex += 1
+                            } else {
+                                // Not a narrative action, stop looking ahead
+                                break
+                            }
+                        } else {
+                            // Same character continues or a CONT'D marker, move on
+                            break
+                        }
+                    }
+                }
             }
             
             // Set our processed dialogs to the new scene
@@ -665,10 +751,16 @@ struct ReadAlongView: View {
         
         // Look for title in description or heading
         var titleText = ""
+        var sceneHeadingFound = false
         
         // Check if first scene has "FADE IN:" or title-like content
-        if firstScene.heading.contains("FADE IN") || 
-           firstScene.heading.uppercased() == firstScene.heading {
+        if firstScene.heading.contains("FADE IN") {
+            titleText += firstScene.heading + "\n\n"
+        } else if firstScene.heading.contains("INT.") || firstScene.heading.contains("EXT.") {
+            // This is a scene heading, not a title - don't include it in titles
+            sceneHeadingFound = true
+        } else if firstScene.heading.uppercased() == firstScene.heading && !firstScene.heading.isEmpty {
+            // This is likely a title
             titleText += firstScene.heading + "\n\n"
         }
         
@@ -681,6 +773,7 @@ struct ReadAlongView: View {
             // Extract just the first part of the description that might contain title info
             let lines = description.components(separatedBy: .newlines)
             var titleLines: [String] = []
+            var reachedSceneContent = false
             
             // Take lines until we hit something that looks like scene content
             for line in lines {
@@ -690,6 +783,7 @@ struct ReadAlongView: View {
                 // Stop when we hit typical scene content
                 if trimmed.contains("INT.") || trimmed.contains("EXT.") || 
                    trimmed.contains("INTERIOR") || trimmed.contains("EXTERIOR") {
+                    reachedSceneContent = true
                     break
                 }
                 
@@ -698,6 +792,12 @@ struct ReadAlongView: View {
             
             if !titleLines.isEmpty {
                 titleText += titleLines.joined(separator: "\n")
+            }
+            
+            // If we didn't find scene content in the title section, we need to make sure
+            // we don't skip the actual scene description
+            if !reachedSceneContent && !sceneHeadingFound {
+                // Don't include scene description in the title
             }
         }
         
