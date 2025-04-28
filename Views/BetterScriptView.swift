@@ -246,16 +246,63 @@ struct ScriptParserView: View {
                 if let firstLine = lines.first {
                     let character = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
                     
-                    // If this character doesn't have a voice yet, assign one
+                    // If this character doesn't have a voice yet, assign one based on likely gender
                     if !processedCharacters.contains(character) {
-                        if let randomVoice = CharacterVoices.shared.getRandomVoice() {
-                            CharacterVoices.shared.setVoice(character: character, voice: randomVoice)
+                        // Determine likely gender from character name
+                        let gender = detectGenderFromName(character)
+                        
+                        if let voice = CharacterVoices.shared.getVoiceFor(character: character, gender: gender) {
+                            CharacterVoices.shared.setVoice(character: character, voice: voice)
                             processedCharacters.insert(character)
                         }
                     }
                 }
             }
         }
+    }
+    
+    // Helper function to determine gender from character name
+    private func detectGenderFromName(_ name: String) -> String {
+        // Common male name endings and patterns
+        let malePatterns = [
+            "MR\\.", "MR ", // Mr.
+            "\\bJOHN\\b", "\\bJACK\\b", "\\bJAMES\\b", "\\bDAVID\\b", "\\bMICHAEL\\b", "\\bROBERT\\b", 
+            "\\bWILLIAM\\b", "\\bJOSEPH\\b", "\\bTHOMAS\\b", "\\bCHARLES\\b", "\\bCHRISTOPHER\\b", 
+            "\\bDANIEL\\b", "\\bMATTHEW\\b", "\\bANTHONY\\b", "\\bDONALD\\b", "\\bMARK\\b", "\\bPAUL\\b", 
+            "\\bSTEVEN\\b", "\\bANDREW\\b", "\\bKENNETH\\b", "\\bJOSHUA\\b", "\\bKEVIN\\b", "\\bBRIAN\\b", 
+            "\\bGEORGE\\b", "\\bTIMOTHY\\b", "\\bRON\\b", "\\bJEFF\\b", "\\bGREG\\b",
+            "\\bHE\\b", "\\bHIM\\b", "\\bMAN\\b", "\\bBOY\\b", "\\bGUY\\b", "\\bFATHER\\b", "\\bDAD\\b",
+            "\\bSON\\b", "\\bBROTHER\\b", "\\bUNCLE\\b"
+        ]
+        
+        // Common female name endings and patterns
+        let femalePatterns = [
+            "MS\\.", "MS ", "MRS\\.", "MRS ", "MISS ", // Ms., Mrs., Miss
+            "\\bMARY\\b", "\\bPATRICIA\\b", "\\bJENNIFER\\b", "\\bLINDA\\b", "\\bELIZABETH\\b", 
+            "\\bBARBARA\\b", "\\bSUSAN\\b", "\\bJESSICA\\b", "\\bSARAH\\b", "\\bKAREN\\b", 
+            "\\bLISA\\b", "\\bNANCY\\b", "\\bBETTY\\b", "\\bMARGARET\\b", "\\bSANDRA\\b", "\\bASHLEY\\b", 
+            "\\bKIMBERLY\\b", "\\bEMILY\\b", "\\bDONNA\\b", "\\bMICHELLE\\b", "\\bDOROTHY\\b", "\\bCAROL\\b", 
+            "\\bAMANDA\\b", "\\bMELISSA\\b", "\\bDEBORAH\\b", "\\bSTEPHANIE\\b", "\\bREBECCA\\b", "\\bLAURA\\b",
+            "\\bSHE\\b", "\\bHER\\b", "\\bWOMAN\\b", "\\bGIRL\\b", "\\bLADY\\b", "\\bMOTHER\\b", "\\bMOM\\b",
+            "\\bDAUGHTER\\b", "\\bSISTER\\b", "\\bAUNT\\b"
+        ]
+        
+        // Check for male patterns
+        for pattern in malePatterns {
+            if name.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil {
+                return "M"
+            }
+        }
+        
+        // Check for female patterns
+        for pattern in femalePatterns {
+            if name.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil {
+                return "F"
+            }
+        }
+        
+        // Default to random if no gender pattern detected
+        return "random"
     }
     
     private func analyzeTextFormatting(pdfText: String) {

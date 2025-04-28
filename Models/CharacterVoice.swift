@@ -64,24 +64,61 @@ class CharacterVoices {
         }
     }
     
-    // Get a random voice from available voices
-    func getRandomVoice() -> AVSpeechSynthesisVoice? {
+    // Get a random voice from available voices, optionally filtered by gender
+    func getRandomVoice(gender: String? = nil) -> AVSpeechSynthesisVoice? {
         let availableVoices = getAvailableVoices()
         guard !availableVoices.isEmpty else { return nil }
+        
+        if let gender = gender {
+            // Filter voices by likely gender based on voice name
+            let genderVoices: [AVSpeechSynthesisVoice]
+            if gender == "M" {
+                genderVoices = availableVoices.filter { voice in
+                    let name = voice.name.lowercased()
+                    // Male voice indicators
+                    return name.contains("male") || 
+                           name.contains("man") || 
+                           name.contains("guy") || 
+                           name.contains("boy") ||
+                           (name.contains("tom") && !name.contains("custom"))
+                }
+            } else if gender == "F" {
+                genderVoices = availableVoices.filter { voice in
+                    let name = voice.name.lowercased()
+                    // Female voice indicators
+                    return name.contains("female") || 
+                           name.contains("woman") || 
+                           name.contains("girl") || 
+                           name.contains("lady") ||
+                           name.contains("nicki") ||
+                           name.contains("samantha") ||
+                           name.contains("karen") ||
+                           name.contains("tessa")
+                }
+            } else {
+                // Return random voice if gender is not M or F
+                return availableVoices.randomElement()
+            }
+            
+            // If we found voices matching gender, return random one. Otherwise fallback to any voice
+            return genderVoices.isEmpty ? availableVoices.randomElement() : genderVoices.randomElement()
+        }
+        
+        // No gender filter, return any random voice
         return availableVoices.randomElement()
     }
     
     // Get the voice for a character, assigning a random one if none exists
-    func getVoiceFor(character: String) -> AVSpeechSynthesisVoice? {
-        // If no voice has been assigned to this character yet, assign a random one
+    func getVoiceFor(character: String, gender: String? = nil) -> AVSpeechSynthesisVoice? {
+        // If no voice has been assigned to this character yet, assign one based on gender
         if characterVoiceMap[character] == nil {
-            if let randomVoice = getRandomVoice() {
+            if let randomVoice = getRandomVoice(gender: gender) {
                 characterVoiceMap[character] = randomVoice.identifier
             }
         }
         
         // Get the voice ID for the character
-        guard let voiceId = characterVoiceMap[character] else { return getRandomVoice() }
+        guard let voiceId = characterVoiceMap[character] else { return getRandomVoice(gender: gender) }
         
         // Find the voice with this ID from all voices (in case it was assigned but later hidden)
         if let voice = AVSpeechSynthesisVoice.speechVoices().first(where: { $0.identifier == voiceId }) {
@@ -91,7 +128,7 @@ class CharacterVoices {
                 return voice
             } else {
                 // If this voice is no longer available (e.g., it was hidden), assign a new random voice
-                if let newVoice = getRandomVoice() {
+                if let newVoice = getRandomVoice(gender: gender) {
                     characterVoiceMap[character] = newVoice.identifier
                     return newVoice
                 }
@@ -99,7 +136,7 @@ class CharacterVoices {
         }
         
         // If we couldn't find the voice, get a random one
-        return getRandomVoice()
+        return getRandomVoice(gender: gender)
     }
     
     // Set a specific voice for a character
