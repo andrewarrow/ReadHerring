@@ -158,15 +158,30 @@ struct ReadAlongView: View {
                 // Character name and dialog text
                 if let dialog = currentDialog {
                     VStack(alignment: .center, spacing: 4) {
-                        // Only show character name for non-narrator content
-                        if !isNarrationDialog(dialog) {
+                        // Display current dialog
+                        if isNarrationDialog(dialog) {
+                            // For narrator text, show a heading
+                            Text("Narrator")
+                                .bold()
+                                .font(.headline)
+                                .foregroundColor(.blue)
+                                .padding(.bottom, 5)
+                        } else {
+                            // For character dialog, show character name
                             Text(dialog.character)
                                 .bold()
                                 .font(.headline)
                                 .padding(.bottom, 5)
                         }
                         
+                        // Display the text content
                         dialogBox(for: dialog)
+                        
+                        // Show debug info
+                        Text("Dialog \(currentDialogIndex+1) of \(currentScene?.dialogs.count ?? 0)")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                            .padding(.top, 2)
                     }
                     .padding()
                 } else {
@@ -187,8 +202,22 @@ struct ReadAlongView: View {
             }
         }
         .onAppear {
+            print("DEBUG: ReadAlongView appeared. Starting scene processing...")
+            print("DEBUG: Initial scene count: \(scenes.count)")
+            
             // Process scenes to ensure they have heading and description dialogs
             processScenes()
+            
+            print("DEBUG: Scene processing complete. Processed scene count: \(scenes.count)")
+            
+            // Debug the first few dialogs
+            if !scenes.isEmpty && !scenes[0].dialogs.isEmpty {
+                print("DEBUG: First scene has \(scenes[0].dialogs.count) dialogs")
+                for i in 0..<min(5, scenes[0].dialogs.count) {
+                    let dialog = scenes[0].dialogs[i]
+                    print("DEBUG: Dialog \(i+1): [\(dialog.character)] \(dialog.text.prefix(50))...")
+                }
+            }
             
             // Assign voices to characters and narrator
             assignVoices()
@@ -202,6 +231,8 @@ struct ReadAlongView: View {
                 isPlaying = newState
             }
             
+            print("DEBUG: Starting initial reading...")
+            
             // Begin reading
             readCurrentDialog()
         }
@@ -212,19 +243,21 @@ struct ReadAlongView: View {
         VStack(alignment: .leading, spacing: 4) {
             // Check if this is narrator content (scene heading or description)
             if isNarrationDialog(dialog) {
-                // For narration, check if it contains character descriptions
-                // and format accordingly
-                if dialog.text.contains("(") && containsCharacterName(dialog.text) {
-                    // This is likely a character description, format it specially
-                    formatCharacterDescription(dialog.text)
-                } else if dialog.text == dialog.text.uppercased() {
-                    // This is a scene heading (ALL CAPS)
+                // Determine what kind of narrator content this is
+                if dialog.text == dialog.text.uppercased() && (dialog.text.contains("INT.") || dialog.text.contains("EXT.")) {
+                    // This is a scene heading (INT./EXT.)
                     Text(dialog.text)
                         .italic()
                         .foregroundColor(.blue)
                         .font(.headline)
+                } else if dialog.text == dialog.text.uppercased() {
+                    // This is an ALL CAPS line (likely a transition or slug)
+                    Text(dialog.text)
+                        .italic()
+                        .foregroundColor(.purple)
+                        .font(.subheadline)
                 } else {
-                    // Regular narration
+                    // Regular scene description - don't try to parse character names in the description
                     Text(dialog.text)
                         .italic()
                         .foregroundColor(.gray)
@@ -263,53 +296,15 @@ struct ReadAlongView: View {
         }
     }
     
-    // Format text with character descriptions
+    // Format scene description (NEVER split it into character formatting)
     @ViewBuilder
     private func formatCharacterDescription(_ text: String) -> some View {
-        // Look for pattern: CHARACTER_NAME (description) action
-        let pattern = "([A-Z][A-Z\\s]+)\\s*\\(([^\\)]+)\\)\\s*(.*)"
-        
-        if let regex = try? NSRegularExpression(pattern: pattern),
-           let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: text.count)) {
-            
-            let nsString = text as NSString
-            
-            // Extract the parts
-            let characterName = match.range(at: 1).location != NSNotFound ?
-                              nsString.substring(with: match.range(at: 1)) : ""
-            
-            let description = match.range(at: 2).location != NSNotFound ?
-                            nsString.substring(with: match.range(at: 2)) : ""
-            
-            let action = match.range(at: 3).location != NSNotFound ?
-                       nsString.substring(with: match.range(at: 3)) : ""
-            
-            // Format with different styles for each part
-            VStack(alignment: .leading, spacing: 2) {
-                if !characterName.isEmpty {
-                    Text(characterName)
-                        .fontWeight(.bold)
-                        .foregroundColor(.black)
-                }
-                
-                if !description.isEmpty {
-                    Text("(\(description))")
-                        .italic()
-                        .foregroundColor(.gray)
-                }
-                
-                if !action.isEmpty {
-                    Text(action)
-                        .foregroundColor(.gray)
-                        .italic()
-                }
-            }
-        } else {
-            // Fallback for unmatched text
-            Text(text)
-                .italic()
-                .foregroundColor(.gray)
-        }
+        // IMPORTANT: Don't try to parse out character names in scene descriptions
+        // Just treat everything as regular scene description
+        Text(text)
+            .italic()
+            .foregroundColor(.gray)
+            .font(.body)
     }
     
     private func splitTextForDisplay(_ text: String) -> [String] {
@@ -431,33 +426,26 @@ struct ReadAlongView: View {
     }
     
     private func readCurrentDialog() {
-        guard let dialog = currentDialog else { return }
-        
-        // Get the text to read
-        var textToRead = dialog.text
-        
-        // Only clean stage directions from character dialog (not from narration)
-        if !isNarrationDialog(dialog) {
-            // Clean text by removing stage directions (text in parentheses)
-            textToRead = dialog.text.replacingOccurrences(
-                of: "\\(.*?\\)",
-                with: "",
-                options: .regularExpression
-            )
+        guard let dialog = currentDialog else {
+            print("DEBUG: No current dialog to read")
+            return
         }
         
-        // Final cleanup
+        print("\nDEBUG: Reading dialog - Character: \(dialog.character), Text: \(dialog.text.prefix(100))...")
+        
+        // Get the text to read - PRESERVE ALL TEXT
+        let textToRead = dialog.text
+        
+        // No filtering or cleaning - read exactly what's in the dialog
         let cleanText = textToRead.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // Skip if nothing to read
+        // Skip if actually empty (should rarely happen)
         if cleanText.isEmpty { 
+            print("DEBUG: Empty dialog, moving to next")
             // Move to the next dialog if this one is empty
             moveToNext()
             return 
         }
-        
-        // Print debug for current dialog
-        print("Reading: [\(dialog.character)] \(cleanText.prefix(50))...")
         
         // Stop any ongoing speech
         speechSynthesizer.stopSpeaking(at: .immediate)
@@ -469,6 +457,7 @@ struct ReadAlongView: View {
         if isNarrationDialog(dialog) {
             // Use narrator voice for scene headings and descriptions
             utterance.voice = characterVoices[narratorName] ?? narrationVoice
+            print("DEBUG: Using narrator voice for: \(dialog.character)")
             
             // Make scene headings stand out a bit
             if dialog.text == dialog.text.uppercased() && (dialog.text.contains("INT.") || dialog.text.contains("EXT.")) {
@@ -482,9 +471,11 @@ struct ReadAlongView: View {
             // Use character-specific voice for dialog
             if let voice = characterVoices[dialog.character] {
                 utterance.voice = voice
+                print("DEBUG: Using character voice for: \(dialog.character)")
             } else {
                 // Fallback to narrator voice if character voice not found
                 utterance.voice = narrationVoice
+                print("DEBUG: Using fallback narrator voice for: \(dialog.character)")
             }
             
             // Standard rate for character dialog
@@ -497,6 +488,7 @@ struct ReadAlongView: View {
         
         // The speaking state will be updated by the delegate
         // Start speaking
+        print("DEBUG: SPEAKING NOW: \(cleanText.prefix(50))...")
         speechSynthesizer.speak(utterance)
     }
     
@@ -530,14 +522,14 @@ struct ReadAlongView: View {
     
     // Process scenes to properly structure screenplay content
     private func processScenes() {
-        // Create new array for processed scenes
-        var processedScenes = [Scene]()
+        print("DEBUG: Starting scene processing with \(scenes.count) scenes")
         
-        // Extract titles and credts
-        let titleCredits = findTitleAndCredits()
+        // Create a completely flat representation of the screenplay
+        var processedScenes = [Scene]()
         
         // Process each scene individually
         for sceneIndex in 0..<scenes.count {
+            print("DEBUG: Processing scene \(sceneIndex + 1)")
             let originalScene = scenes[sceneIndex]
             
             // Create a new scene to work with
@@ -549,190 +541,50 @@ struct ReadAlongView: View {
                 sceneNumber: originalScene.sceneNumber
             )
             
-            // Storage for organized dialogs
+            // Storage for ALL dialog entries - we'll completely rebuild this
             var sequencedDialogs: [Scene.Dialog] = []
             
-            // 1. If this is the first scene, add title/credits
-            if sceneIndex == 0 && !titleCredits.isEmpty {
-                sequencedDialogs.append(Scene.Dialog(character: narratorName, text: titleCredits))
-            }
-            
-            // 2. Add scene heading as a separate narrator dialog (just once)
-            // Only add if it's not already in titleCredits to avoid duplication
-            if !originalScene.heading.isEmpty && !titleCredits.contains(originalScene.heading) {
+            // 1. Add scene heading (read by narrator)
+            if !originalScene.heading.isEmpty {
+                print("DEBUG: Adding scene heading: \(originalScene.heading)")
                 sequencedDialogs.append(Scene.Dialog(character: narratorName, text: originalScene.heading))
             }
             
-            // 3. Extract and add scene description (general atmosphere and setting)
-            var sceneDescriptionAdded = false
-            
-            // Regular expression for finding character descriptions
-            let characterPattern = "([A-Z][A-Z\\s]+)\\s*\\(([^\\)]+)\\)\\s+(.+)"
-            let characterRegex = try? NSRegularExpression(pattern: characterPattern)
-            
-            // Extract the main scene description without character descriptions
+            // 2. Add scene description (read by narrator) - CRITICAL
             if !originalScene.description.isEmpty {
-                // Split into paragraphs for better reading
-                let paragraphs = originalScene.description.components(separatedBy: "\n\n")
+                print("DEBUG: Adding scene description (\(originalScene.description.count) chars)")
                 
-                // Process ALL paragraphs of the scene description
+                // Split description into paragraphs to make it easier to read
+                let paragraphs = originalScene.description.components(separatedBy: "\n\n")
                 for paragraph in paragraphs {
                     let trimmed = paragraph.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !trimmed.isEmpty {
-                        // Check if paragraph is a character description
-                        if let regex = characterRegex, 
-                           regex.firstMatch(in: trimmed, range: NSRange(location: 0, length: trimmed.count)) != nil {
-                            // Character descriptions will be handled before their dialog
-                        } else {
-                            // This is general scene description - the narrator should read it
-                            sequencedDialogs.append(Scene.Dialog(character: narratorName, text: trimmed))
-                            sceneDescriptionAdded = true
-                        }
+                        print("DEBUG: - Adding description paragraph: \(trimmed.prefix(30))...")
+                        sequencedDialogs.append(Scene.Dialog(character: narratorName, text: trimmed))
                     }
                 }
             }
             
-            // 4. Build a map of character introductions from scene description
-            var characterIntros: [String: String] = [:]  // Character name -> intro text
-            
-            // Extract character descriptions from the scene description
-            let sceneText = originalScene.description
-            let sceneLines = sceneText.components(separatedBy: .newlines)
-            
-            for line in sceneLines {
-                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                if let regex = characterRegex,
-                   let match = regex.firstMatch(in: trimmed, range: NSRange(location: 0, length: trimmed.count)) {
-                    
-                    let nsLine = trimmed as NSString
-                    let charName = match.range(at: 1).location != NSNotFound ? 
-                                 nsLine.substring(with: match.range(at: 1)) : ""
-                    
-                    // Store the full line as the intro for this character
-                    characterIntros[charName] = trimmed
-                }
-            }
-            
-            // 5. Track characters who have been introduced
-            var introducedCharacters = Set<String>()
-            
-            // Helper function to check if text contains uppercase words (character names)
-            func containsUppercaseWord(_ text: String) -> Bool {
-                let words = text.components(separatedBy: .whitespacesAndNewlines)
-                return words.contains { word in
-                    let trimmed = word.trimmingCharacters(in: .punctuationCharacters)
-                    return trimmed.count > 1 && trimmed == trimmed.uppercased() && trimmed != "INT." && trimmed != "EXT."
-                }
-            }
-            
-            // Map to track which dialog entries should be skipped (e.g., narrative actions already processed)
-            var skipDialogIndices = Set<Int>()
-            
-            // 6. Process all dialogs and identify narrative sections
-            for dialogIndex in 0..<originalScene.dialogs.count {
-                // Skip if this dialog was already processed
-                if skipDialogIndices.contains(dialogIndex) {
-                    continue
-                }
-                
-                let dialog = originalScene.dialogs[dialogIndex]
-                
-                // Skip any existing narrator content
+            // 3. Add ALL character dialog entries EXACTLY as they appear in the original
+            print("DEBUG: Original scene has \(originalScene.dialogs.count) dialog entries")
+            for (i, dialog) in originalScene.dialogs.enumerated() {
+                // Skip already processed narrator content (to avoid duplication)
                 if dialog.character == narratorName || 
                    dialog.character.contains("SCENE") ||
                    dialog.character.contains("HEADING") ||
                    dialog.character.contains("DESCRIPTION") {
+                    print("DEBUG: Skipping narrator content: \(dialog.character)")
                     continue
                 }
                 
-                let character = dialog.character
-                let dialogText = dialog.text
-                
-                // Check if we need to introduce this character first
-                if !introducedCharacters.contains(character) {
-                    // Add the character introduction if we have one
-                    if let introText = characterIntros[character] {
-                        sequencedDialogs.append(Scene.Dialog(character: narratorName, text: introText))
-                    }
-                    introducedCharacters.insert(character)
-                }
-                
-                // Now add the character's dialog
-                // Check if the dialog contains another character's introduction
-                if let regex = characterRegex,
-                   let match = regex.firstMatch(in: dialogText, range: NSRange(location: 0, length: dialogText.count)) {
-                    
-                    // Extract the dialog part vs. character introduction part
-                    let nsText = dialogText as NSString
-                    
-                    let dialogPart = match.range.location > 0 ?
-                                   nsText.substring(with: NSRange(location: 0, length: match.range.location))
-                                        .trimmingCharacters(in: .whitespacesAndNewlines) : ""
-                    
-                    let charName = match.range(at: 1).location != NSNotFound ? 
-                                 nsText.substring(with: match.range(at: 1)) : ""
-                    
-                    // Add the character's dialog (if any)
-                    if !dialogPart.isEmpty {
-                        sequencedDialogs.append(Scene.Dialog(character: character, text: dialogPart))
-                    }
-                    
-                    // Add the character intro for the next character
-                    if !charName.isEmpty && !introducedCharacters.contains(charName) {
-                        let introText = nsText.substring(with: match.range)
-                        sequencedDialogs.append(Scene.Dialog(character: narratorName, text: introText))
-                        introducedCharacters.insert(charName)
-                    }
-                } else {
-                    // Regular dialog - add it as is
-                    sequencedDialogs.append(dialog)
-                }
-                
-                // Check if next lines contain narrative action
-                // Look ahead in the dialog collection to find narrative actions
-                if dialogIndex + 1 < originalScene.dialogs.count {
-                    var lookAheadIndex = dialogIndex + 1
-                    
-                    while lookAheadIndex < originalScene.dialogs.count {
-                        let nextDialog = originalScene.dialogs[lookAheadIndex]
-                        
-                        // Stop looking if we hit another character's dialog
-                        if nextDialog.character != character && !nextDialog.character.contains("(CONT'D)") &&
-                           !nextDialog.character.contains(character) {
-                            
-                            // Check if this is a narrative action/description, not dialog
-                            let nextText = nextDialog.text
-                            
-                            // Criteria for narrative action:
-                            // 1. Contains a character name in CAPS
-                            // 2. Is not dialog (no quotes or speech indicators)
-                            // 3. Is not a dialog direction (doesn't start with parentheses)
-                            let hasCharacterName = containsUppercaseWord(nextText)
-                            let isNotDialogDirections = !nextText.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("(")
-                            let isNotSpeech = !nextText.contains("\"") && !nextText.contains("says") && 
-                                             !nextText.contains("says") && !nextText.contains("replies")
-                            
-                            if hasCharacterName && isNotDialogDirections && isNotSpeech {
-                                // This is a narrative action - assign to narrator
-                                sequencedDialogs.append(Scene.Dialog(character: narratorName, text: nextText))
-                                skipDialogIndices.insert(lookAheadIndex)
-                                
-                                // Step to next and see if more narrative continues
-                                lookAheadIndex += 1
-                            } else {
-                                // Not a narrative action, stop looking ahead
-                                break
-                            }
-                        } else {
-                            // Same character continues or a CONT'D marker, move on
-                            break
-                        }
-                    }
-                }
+                // Add this dialog directly
+                print("DEBUG: Adding dialog \(i+1): [\(dialog.character)] \(dialog.text.prefix(30))...")
+                sequencedDialogs.append(dialog)
             }
             
             // Set our processed dialogs to the new scene
             newScene.dialogs = sequencedDialogs
+            print("DEBUG: Scene \(sceneIndex + 1) now has \(sequencedDialogs.count) dialog entries")
             
             // Add to our result list
             processedScenes.append(newScene)
@@ -740,6 +592,15 @@ struct ReadAlongView: View {
         
         // Update scenes with our processed version
         scenes = processedScenes
+        
+        // Print out all dialog in the first scene as a test
+        if !scenes.isEmpty {
+            print("========== FIRST SCENE DIALOG LISTING ==========")
+            for (i, dialog) in scenes[0].dialogs.enumerated() {
+                print("[\(i+1)/\(scenes[0].dialogs.count)] [\(dialog.character)]: \(dialog.text.prefix(50))...")
+            }
+            print("================================================")
+        }
     }
     
     // Find title and credits at the beginning of the screenplay
@@ -818,6 +679,11 @@ struct ReadAlongView: View {
     }
     
     private func moveToNext() {
+        // Store current state for comparison
+        let oldSceneIndex = currentSceneIndex
+        let oldDialogIndex = currentDialogIndex
+        
+        // Get next dialog position
         if let scene = currentScene, currentDialogIndex < scene.dialogs.count - 1 {
             currentDialogIndex += 1
         } else if currentSceneIndex < scenes.count - 1 {
@@ -825,12 +691,31 @@ struct ReadAlongView: View {
             currentDialogIndex = 0
         }
         
-        // Print debug info
+        // CRITICAL DEBUG - Print ALL available dialog in the scene to verify content
         if let scene = currentScene {
+            print("===== FULL DIALOG LISTING FOR SCENE \(currentSceneIndex + 1) =====")
+            for (i, dialog) in scene.dialogs.enumerated() {
+                let indicator = (i == currentDialogIndex) ? "-> CURRENT: " : "   "
+                let shortText = dialog.text.count > 50 ? 
+                               dialog.text.prefix(50).replacingOccurrences(of: "\n", with: "\\n") + "..." : 
+                               dialog.text.replacingOccurrences(of: "\n", with: "\\n")
+                print("\(indicator)[\(i+1)/\(scene.dialogs.count)] [\(dialog.character)]: \(shortText)")
+            }
+            print("====================================================")
+            
+            // Print what we're moving to
             print("Moving to Scene \(currentSceneIndex + 1) of \(scenes.count), Dialog \(currentDialogIndex + 1) of \(scene.dialogs.count)")
             if let dialog = currentDialog {
                 let shortText = dialog.text.count > 50 ? dialog.text.prefix(50) + "..." : dialog.text
-                print("Character: \(dialog.character), Text: \(shortText)")
+                print("ABOUT TO READ: [\(dialog.character)]: \(shortText)")
+            }
+            
+            // Debug movement
+            if oldSceneIndex != currentSceneIndex {
+                print("DEBUG: Changed scene from \(oldSceneIndex + 1) to \(currentSceneIndex + 1)")
+            }
+            if oldDialogIndex != currentDialogIndex {
+                print("DEBUG: Changed dialog from \(oldDialogIndex + 1) to \(currentDialogIndex + 1)")
             }
         }
         

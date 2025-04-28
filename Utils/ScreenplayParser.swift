@@ -367,30 +367,73 @@ class ScreenplayParser {
         // Special narrator name - must match what's used in ReadAlongView
         let narratorName = "NARRATOR"
         
-        // First pass: Add scene headings and descriptions as narrator dialogs
+        // Debug and validate scenes
+        print("DEBUG: PARSER - Starting with \(scenes.count) scenes")
+        for (i, scene) in scenes.enumerated() {
+            print("DEBUG: PARSER - Scene \(i+1) Heading: \(scene.heading)")
+            print("DEBUG: PARSER - Scene \(i+1) Description length: \(scene.description.count) chars")
+        }
+        
+        // First pass through all scenes - ensure heading/description are saved
+        var sceneHeadings = [String]()
+        var sceneDescriptions = [String]()
+        
+        for scene in scenes {
+            sceneHeadings.append(scene.heading)
+            sceneDescriptions.append(scene.description)
+        }
+        
+        // Now rebuild all the scenes with dialog content
         for (index, scene) in scenes.enumerated() {
-            // Add scene heading as a dialog from the narrator
+            // Clear any existing dialogs (start fresh)
+            scene.dialogs = []
+            
+            // 1. Add scene heading as narrator dialog
             if !scene.heading.isEmpty {
                 scene.addDialog(character: narratorName, text: scene.heading)
+                print("DEBUG: PARSER - Added heading to scene \(index+1): \(scene.heading)")
             }
             
-            // Add scene description as a dialog from the narrator
+            // 2. Add full scene description as narrator dialog
             if !scene.description.isEmpty {
-                scene.addDialog(character: narratorName, text: scene.description)
+                print("DEBUG: PARSER - Adding description to scene \(index+1) - Length: \(scene.description.count)")
+                
+                // Process paragraphs individually
+                let paragraphs = scene.description.components(separatedBy: "\n\n")
+                for paragraph in paragraphs {
+                    let trimmed = paragraph.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        scene.addDialog(character: narratorName, text: trimmed)
+                        print("DEBUG: PARSER -   Added description para: \(trimmed.prefix(30))...")
+                    }
+                }
             }
         }
         
         // Second pass: Process character dialogs
+        print("DEBUG: PARSER - Starting character dialog processing")
+        
+        // Reset for second pass
+        currentSceneIndex = 0
+        currentCharacter = ""
+        collectingDialog = false
+        dialogLines = []
+        
+        // Track character dialog lines separately to make sure we don't miss them
+        var characterDialogCount = 0
+        
         for line in lines {
             let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
             
             // Skip empty lines
             if trimmedLine.isEmpty {
                 if collectingDialog && !dialogLines.isEmpty {
-                    // End of dialog block
+                    // End of dialog block - add to current scene
                     let dialogText = dialogLines.joined(separator: " ")
                     if currentSceneIndex < scenes.count && !currentCharacter.isEmpty {
                         scenes[currentSceneIndex].addDialog(character: currentCharacter, text: dialogText)
+                        characterDialogCount += 1
+                        print("DEBUG: PARSER - Added dialog for \(currentCharacter): \(dialogText.prefix(30))...")
                     }
                     collectingDialog = false
                     dialogLines = []
@@ -399,13 +442,15 @@ class ScreenplayParser {
                 continue
             }
             
-            // Check if this is a scene heading
+            // Check if this is a scene heading - update current scene if so
             if checkIfSceneHeading(trimmedLine) {
                 // End any ongoing dialog collection
                 if collectingDialog && !dialogLines.isEmpty {
                     let dialogText = dialogLines.joined(separator: " ")
                     if currentSceneIndex < scenes.count && !currentCharacter.isEmpty {
                         scenes[currentSceneIndex].addDialog(character: currentCharacter, text: dialogText)
+                        characterDialogCount += 1
+                        print("DEBUG: PARSER - Added dialog for \(currentCharacter): \(dialogText.prefix(30))...")
                     }
                     collectingDialog = false
                     dialogLines = []
@@ -413,22 +458,43 @@ class ScreenplayParser {
                 }
                 
                 // Find matching scene
-                if let index = scenes.firstIndex(where: { $0.heading.contains(trimmedLine) }) {
-                    currentSceneIndex = index
+                for (i, sceneHeading) in sceneHeadings.enumerated() {
+                    if sceneHeading.contains(trimmedLine) {
+                        currentSceneIndex = i
+                        print("DEBUG: PARSER - Found scene heading, switching to scene \(i+1)")
+                        break
+                    }
                 }
                 continue
             }
             
-            // Check if this is a character name (ALL CAPS)
+            // In screenplay format, dialog speaker names typically:
+            // 1. Have at least 10+ spaces of indentation (to center them)
+            // 2. Are preceded by a blank line
+            // 3. Are in ALL CAPS
+            
+            // Check the indentation level - dialog character names typically have significant indentation
+            let leadingSpaces = line.prefix(while: { $0 == " " }).count
+            let hasCenterIndentation = leadingSpaces >= 10  // Dialog speaker names usually have 10+ spaces
+            
+            // Check if preceded by blank line - an important screenplay format indicator
+            let currentIndex = lines.firstIndex(of: line) ?? 0
+            let isPrecededByBlankLine = currentIndex > 0 && lines[currentIndex-1].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            
+            // Check if ALL CAPS
             let characterRegex = try? NSRegularExpression(pattern: "^[A-Z][A-Z\\s\\-'().]+$")
             let isAllCaps = characterRegex?.firstMatch(in: trimmedLine, options: [], range: NSRange(location: 0, length: trimmedLine.utf16.count)) != nil
             
-            if isAllCaps && !trimmedLine.contains("INT.") && !trimmedLine.contains("EXT.") {
+            // Now combine all criteria - only detect actual dialog speaker names, not character names in description
+            if isAllCaps && !trimmedLine.contains("INT.") && !trimmedLine.contains("EXT.") && 
+               hasCenterIndentation && isPrecededByBlankLine {
                 // End any ongoing dialog collection
                 if collectingDialog && !dialogLines.isEmpty {
                     let dialogText = dialogLines.joined(separator: " ")
                     if currentSceneIndex < scenes.count && !currentCharacter.isEmpty {
                         scenes[currentSceneIndex].addDialog(character: currentCharacter, text: dialogText)
+                        characterDialogCount += 1
+                        print("DEBUG: PARSER - Added dialog for \(currentCharacter): \(dialogText.prefix(30))...")
                     }
                 }
                 
@@ -450,6 +516,7 @@ class ScreenplayParser {
                 currentCharacter = cleanName
                 collectingDialog = true
                 dialogLines = []
+                print("DEBUG: PARSER - Found character: \(cleanName)")
                 continue
             }
             
@@ -464,7 +531,15 @@ class ScreenplayParser {
             let dialogText = dialogLines.joined(separator: " ")
             if currentSceneIndex < scenes.count && !currentCharacter.isEmpty {
                 scenes[currentSceneIndex].addDialog(character: currentCharacter, text: dialogText)
+                characterDialogCount += 1
+                print("DEBUG: PARSER - Added final dialog for \(currentCharacter): \(dialogText.prefix(30))...")
             }
+        }
+        
+        // Final verification
+        print("DEBUG: PARSER - Finished parsing. Added \(characterDialogCount) character dialog entries")
+        for (i, scene) in scenes.enumerated() {
+            print("DEBUG: PARSER - Scene \(i+1) now has \(scene.dialogs.count) dialog entries")
         }
     }
     
