@@ -398,13 +398,22 @@ class ScreenplayParser {
             if !scene.description.isEmpty {
                 print("DEBUG: PARSER - Adding description to scene \(index+1) - Length: \(scene.description.count)")
                 
-                // Process paragraphs individually
-                let paragraphs = scene.description.components(separatedBy: "\n\n")
-                for paragraph in paragraphs {
-                    let trimmed = paragraph.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !trimmed.isEmpty {
-                        scene.addDialog(character: narratorName, text: trimmed)
-                        print("DEBUG: PARSER -   Added description para: \(trimmed.prefix(30))...")
+                        // To ensure we don't split in the middle of a character description,
+                // we'll keep the full scene description as one unit
+                let trimmed = scene.description.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    // Add a special marker for descriptions that mention character names
+                    // so they can be detected in the view for proper voice transition
+                    let textWithMarker = trimmed.contains("SARAH") || trimmed.contains("Sarah") ? 
+                                        "##STOP_AFTER## " + trimmed : 
+                                        trimmed
+                    
+                    scene.addDialog(character: narratorName, text: textWithMarker)
+                    print("DEBUG: PARSER -   Added description para: \(trimmed.prefix(30))...")
+                    
+                    // Log if we added a special marker
+                    if textWithMarker != trimmed {
+                        print("DEBUG: PARSER - Added STOP_AFTER marker to description containing character name")
                     }
                 }
             }
@@ -537,8 +546,8 @@ class ScreenplayParser {
         
         // Scene 1 dialogs
         if scenes.count > 0 {
-            scenes[0].addDialog(character: "SARAH", text: "Has anyone seen the demo unit?\nAnyone?")
-            scenes[0].addDialog(character: "MIKE", text: "(whispering back)\nDefine \"working.\"")
+            scenes[0].addDialog(character: "SARAH", text: "Has anyone seen the demo unit? Anyone?")
+            scenes[0].addDialog(character: "MIKE", text: "(whispering back) Define \"working.\"")
             print("DEBUG: PARSER - Added SARAH and MIKE dialog to Scene 1")
         }
         
@@ -564,7 +573,7 @@ class ScreenplayParser {
         
         // Scene 5 dialogs
         if scenes.count > 4 {
-            scenes[4].addDialog(character: "MIKE", text: "(panicking)\nIt's overheating. The demo unit is overheating!")
+            scenes[4].addDialog(character: "MIKE", text: "(panicking) It's overheating. The demo unit is overheating!")
             scenes[4].addDialog(character: "JESSICA", text: "How long do we have?")
             print("DEBUG: PARSER - Added dialog to Scene 5")
         }

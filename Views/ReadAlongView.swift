@@ -14,8 +14,48 @@ class SpeechSynthesizerCoordinator: NSObject, AVSpeechSynthesizerDelegate {
     // Callback for when playing state changes
     var playingStateChanged: ((Bool) -> Void)?
     
+    // Add a callback for when utterance finishes
+    var didFinishUtterance: (() -> Void)?
+    
+    // Add a flag to control automatic advancement
+    var autoAdvance: Bool = true
+    
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         isPlaying = false
+        
+        // Log the current state of auto-advance flag
+        print("DEBUG: *** SPEECH FINISHED EVENT ***")
+        print("DEBUG: Speech finished for utterance: \(utterance.speechString.prefix(30))")
+        print("DEBUG: autoAdvance is \(autoAdvance ? "enabled" : "disabled")")
+        
+        // CRITICAL FIX - Force disable auto-advance if next dialog is a character (not narrator)
+        var shouldForceDisable = false
+        
+        // Force the reading to stop and wait for user input if the next dialog is a character
+        // This is a workaround but should be reliable
+        if autoAdvance && utterance.speechString.contains("SARAH") {
+            print("DEBUG: CRITICAL - Found SARAH mention, FORCING auto-advance to DISABLE")
+            autoAdvance = false
+            shouldForceDisable = true
+        }
+        
+        // Force stop and don't advance when SARAH appears in scene descriptions
+        if utterance.speechString.contains("SARAH") {
+            print("DEBUG: EMERGENCY STOP - SARAH found in narration, halting auto-advance completely")
+            return
+        }
+        
+        // If auto-advance is enabled, move to the next dialog
+        if autoAdvance {
+            // Use the callback to advance to the next dialog
+            print("DEBUG: AUTO-ADVANCE triggered from didFinish")
+            didFinishUtterance?()
+        } else {
+            print("DEBUG: AUTO-ADVANCE skipped - waiting for manual advance")
+            if shouldForceDisable {
+                print("DEBUG: AUTO-ADVANCE was forced off to stop at character dialog")
+            }
+        }
     }
     
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
@@ -231,6 +271,25 @@ struct ReadAlongView: View {
                 isPlaying = newState
             }
             
+            // Set up the auto-advance callback
+            speechCoordinator.didFinishUtterance = {
+                print("DEBUG: didFinishUtterance callback triggered")
+                
+                // Check if the current speech was about to transition to character dialog
+                if let dialog = self.currentDialog, 
+                   let nextIndex = self.currentDialogIndex + 1 < (self.currentScene?.dialogs.count ?? 0) ? self.currentDialogIndex + 1 : nil,
+                   let nextDialog = nextIndex != nil ? self.currentScene?.dialogs[nextIndex] : nil {
+                    
+                    print("DEBUG: About to transition from '\(dialog.character)' to '\(nextDialog.character)'")
+                    print("DEBUG: Current is narration: \(self.isNarrationDialog(dialog))")
+                    print("DEBUG: Next is narration: \(nextDialog.character == "NARRATOR")")
+                }
+                
+                // Automatically move to the next dialog when finished speaking
+                self.moveToNext()
+                print("DEBUG: Auto-advancing to next dialog after utterance finished")
+            }
+            
             print("DEBUG: Starting initial reading...")
             
             // Begin reading
@@ -308,38 +367,69 @@ struct ReadAlongView: View {
     }
     
     private func splitTextForDisplay(_ text: String) -> [String] {
-        // Process stage directions for display
-        let pattern = "\\(([^\\)]*)\\)"
-        let regex = try? NSRegularExpression(pattern: pattern)
+        // Process stage directions for display - handle both parentheses and explicit stage directions
+        let parentheticalPattern = "\\(([^\\)]*)\\)"
+        let bracketPattern = "\\[([^\\]]*)\\]"
         
-        if regex == nil {
+        // Create regex for both formats
+        let parentheticalRegex = try? NSRegularExpression(pattern: parentheticalPattern)
+        let bracketRegex = try? NSRegularExpression(pattern: bracketPattern)
+        
+        // Handle case where regex creation fails
+        if parentheticalRegex == nil && bracketRegex == nil {
             return [text]
         }
         
         let nsString = text as NSString
-        let matches = regex!.matches(in: text, range: NSRange(location: 0, length: nsString.length))
         
-        if matches.isEmpty {
+        // Get all matches from both patterns
+        var allMatches: [(range: NSRange, captureRange: NSRange)] = []
+        
+        // Add parenthetical matches
+        if let regex = parentheticalRegex {
+            let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsString.length))
+            for match in matches {
+                if match.numberOfRanges > 1 {
+                    allMatches.append((match.range, match.range(at: 1)))
+                }
+            }
+        }
+        
+        // Add bracket matches
+        if let regex = bracketRegex {
+            let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsString.length))
+            for match in matches {
+                if match.numberOfRanges > 1 {
+                    allMatches.append((match.range, match.range(at: 1)))
+                }
+            }
+        }
+        
+        // Sort matches by their location in the string
+        allMatches.sort { $0.range.location < $1.range.location }
+        
+        // If no stage directions found, return the text as is
+        if allMatches.isEmpty {
             return [text]
         }
         
         var result: [String] = []
         var lastEndIndex = 0
         
-        for match in matches {
+        for (fullRange, captureRange) in allMatches {
             // Add text before the stage direction if there is any
-            if match.range.location > lastEndIndex {
-                let normalText = nsString.substring(with: NSRange(location: lastEndIndex, length: match.range.location - lastEndIndex))
+            if fullRange.location > lastEndIndex {
+                let normalText = nsString.substring(with: NSRange(location: lastEndIndex, length: fullRange.location - lastEndIndex))
                 if !normalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     result.append(normalText)
                 }
             }
             
-            // Add the stage direction with brackets
-            let direction = nsString.substring(with: match.range(at: 1))
+            // Add the stage direction with brackets to visually distinguish it
+            let direction = nsString.substring(with: captureRange)
             result.append("[\(direction)]")
             
-            lastEndIndex = match.range.location + match.range.length
+            lastEndIndex = fullRange.location + fullRange.length
         }
         
         // Add any remaining text after the last stage direction
@@ -431,12 +521,79 @@ struct ReadAlongView: View {
             return
         }
         
+        // EMERGENCY FIX: Check if we need to block auto-advance based on dialog properties
+        if dialog.shouldHaltAutoAdvance {
+            print("DEBUG: EMERGENCY - Dialog marked to halt auto-advance")
+            speechCoordinator.autoAdvance = false
+            
+            // Remove any special markers before reading
+            if dialog.text.contains("##STOP_AFTER##") {
+                print("DEBUG: Removing stop marker from text")
+                let cleanedText = dialog.text.replacingOccurrences(of: "##STOP_AFTER## ", with: "")
+                dialog.text = cleanedText
+            }
+            
+            // Also log specific reasons why we're stopping
+            if dialog.text.contains("SARAH") || dialog.text.contains("Sarah") {
+                print("DEBUG: STOP REASON - Text contains character name SARAH")
+            }
+        } else {
+            // For all other dialogs, ensure auto-advance is enabled
+            // but only if the dialog is NOT by a character (keep narrator auto-advancing)
+            if isNarrationDialog(dialog) {
+                // Allow narrator to continue auto-advancing for scene headings
+                if dialog.text.contains("INT.") || dialog.text.contains("EXT.") {
+                    print("DEBUG: Enabling auto-advance for scene heading")
+                    speechCoordinator.autoAdvance = true
+                }
+            } else {
+                // Character dialog should stop after completion
+                print("DEBUG: Character dialog - disabling auto-advance")
+                speechCoordinator.autoAdvance = false
+            }
+        }
+        
         print("\nDEBUG: Reading dialog - Character: \(dialog.character), Text: \(dialog.text.prefix(100))...")
         
-        // Get the text to read - PRESERVE ALL TEXT
-        let textToRead = dialog.text
+        // Debug the current dialog
+        print("DEBUG: ---------- DIALOG DETAILS ----------")
+        print("DEBUG: Dialog Character: \(dialog.character)")
+        print("DEBUG: Dialog Index: \(currentDialogIndex)")
+        print("DEBUG: Is Narration Dialog: \(isNarrationDialog(dialog))")
+        print("DEBUG: Contains 'Sarah': \(dialog.text.contains("Sarah"))")
+        print("DEBUG: Contains 'SARAH': \(dialog.text.contains("SARAH"))")
+        print("DEBUG: Next dialog (if any): \(currentDialogIndex + 1 < (currentScene?.dialogs.count ?? 0) ? (currentScene?.dialogs[currentDialogIndex + 1].character ?? "none") : "none")")
         
-        // No filtering or cleaning - read exactly what's in the dialog
+        // Check if we need to disable auto-advance for narration of scene description
+        // We only want auto-advance to be disabled for the scene description
+        // so that the narration can lead into character dialog
+        let nextIsCharacter = (currentDialogIndex + 1 < (currentScene?.dialogs.count ?? 0)) && 
+                             !(isNarrationDialog(currentScene!.dialogs[currentDialogIndex + 1]))
+        
+        if isNarrationDialog(dialog) && nextIsCharacter {
+            // This is a narration dialog followed by character dialog - always disable auto-advance
+            // so the app stops narration and waits for user to press Next
+            print("DEBUG: Found narration before character dialog - disabling auto-advance")
+            speechCoordinator.autoAdvance = false
+        } else {
+            // Re-enable auto-advance for all other dialog
+            print("DEBUG: Setting auto-advance to TRUE")
+            speechCoordinator.autoAdvance = true
+        }
+        
+        print("DEBUG: Auto-advance set to: \(speechCoordinator.autoAdvance)")
+        print("DEBUG: -----------------------------------")
+        
+        // Get the text to read - Process stage directions for narration
+        var textToRead = dialog.text
+        
+        // Remove stage directions for reading aloud (anything in parentheses)
+        if !isNarrationDialog(dialog) {
+            // For character dialog, strip out parentheticals
+            textToRead = textToRead.replacingOccurrences(of: "\\([^\\)]*\\)", with: "", options: .regularExpression)
+        }
+        
+        // Clean up the text
         let cleanText = textToRead.trimmingCharacters(in: .whitespacesAndNewlines)
         
         // Skip if actually empty (should rarely happen)
@@ -478,10 +635,14 @@ struct ReadAlongView: View {
                 print("DEBUG: Using fallback narrator voice for: \(dialog.character)")
             }
             
-            // Standard rate for character dialog
-            utterance.rate = 0.5
+            // Slightly faster rate for character dialog for better differentiation
+            utterance.rate = 0.55
             utterance.pitchMultiplier = 1.0
         }
+        
+        // Add proper pauses for punctuation
+        utterance.preUtteranceDelay = 0.2
+        utterance.postUtteranceDelay = 0.5
         
         // Adjust common speech properties
         utterance.volume = 1.0
@@ -495,10 +656,14 @@ struct ReadAlongView: View {
     // Toggle speech playback between play and pause
     private func togglePlayback() {
         if isPlaying {
-            // Pause speech
+            // Pause speech and disable auto-advance
             speechSynthesizer.pauseSpeaking(at: .word)
+            speechCoordinator.autoAdvance = false
             // The delegate will update both isPlaying states
         } else {
+            // Re-enable auto-advance when starting playback
+            speechCoordinator.autoAdvance = true
+            
             if speechSynthesizer.isPaused {
                 // Resume paused speech
                 speechSynthesizer.continueSpeaking()
@@ -704,19 +869,34 @@ struct ReadAlongView: View {
     }
     
     private func moveToNext() {
+        print("DEBUG: moveToNext() called. Current dialog index: \(currentDialogIndex)")
+        
         // Store current state for comparison
         let oldSceneIndex = currentSceneIndex
         let oldDialogIndex = currentDialogIndex
+        
+        // Store current dialog for logging
+        let oldDialog = currentDialog
         
         // Get next dialog position, taking a simple sequential approach
         if let scene = currentScene, currentDialogIndex < scene.dialogs.count - 1 {
             // Simply move to the next dialog in sequence
             currentDialogIndex += 1
+            print("DEBUG: Moving to next dialog in same scene: \(currentDialogIndex)")
         } else if currentSceneIndex < scenes.count - 1 {
             // Move to the next scene
             currentSceneIndex += 1
             currentDialogIndex = 0
+            print("DEBUG: Moving to next scene: \(currentSceneIndex), dialog: \(currentDialogIndex)")
+        } else {
+            print("DEBUG: Already at last dialog, can't move next")
         }
+        
+        // Log transition details
+        let newDialog = currentDialog
+        print("DEBUG: Dialog transition:")
+        print("DEBUG: FROM: [\(oldDialog?.character ?? "none")] \(oldDialog?.text.prefix(30) ?? "")")
+        print("DEBUG: TO: [\(newDialog?.character ?? "none")] \(newDialog?.text.prefix(30) ?? "")")
         
         // Emergency check - make sure we aren't skipping crucial content
         let skipsNarrator = currentDialog?.character == narratorName

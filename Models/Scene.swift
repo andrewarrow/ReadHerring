@@ -26,10 +26,18 @@ class Scene {
         var text: String
         var containsStageDirections: Bool
         
+        // Add a property to track whether this dialog should stop auto-advance
+        var shouldHaltAutoAdvance: Bool = false
+        
         init(character: String, text: String) {
             self.character = character
             self.text = text
             self.containsStageDirections = text.range(of: "\\(.*?\\)", options: .regularExpression) != nil
+            
+            // Check if this dialog contains text that should stop auto-advance
+            self.shouldHaltAutoAdvance = text.contains("SARAH") || 
+                                         text.contains("Sarah") || 
+                                         text.contains("##STOP_AFTER##")
         }
     }
 }
