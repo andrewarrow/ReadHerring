@@ -4,6 +4,8 @@ import Foundation
 import UIKit // Keep UIKit for openSettings
 import PDFKit
 
+// Using BetterScriptView.swift components
+
 // Voices View Wrapper
 struct VoicesViewWrapper: View {
     var moveToNextScreen: () -> Void
@@ -150,7 +152,7 @@ struct VoicesViewWrapper: View {
                 }
                 
                 Button(action: {
-                    // Save selected voice and continue to ReadAlong view
+                    // Launch the script parser view
                     navigateToReadAlongView()
                 }) {
                     Text("Ready to Read")
@@ -168,15 +170,14 @@ struct VoicesViewWrapper: View {
             loadVoices()
         }
         .fullScreenCover(isPresented: $showingReadAlongView) {
-            let pdfURL = getPDFURL()
-            let scenes = convertPDFToScenes(url: pdfURL)
-            ReadAlongView(pdfURL: pdfURL, scenes: scenes)
+            // Show the BetterScriptView with its default screenplay
+            ScriptParserView()
         }
     }
     
-    // Navigate to the ReadAlong view
+    // Navigate to the script parser view
     private func navigateToReadAlongView() {
-        // Show the ReadAlong view as a sheet
+        // Show the script parser view as a full-screen cover
         showingReadAlongView = true
     }
     

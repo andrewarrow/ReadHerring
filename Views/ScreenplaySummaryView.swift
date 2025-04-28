@@ -1,4 +1,7 @@
 import SwiftUI
+import UIKit
+
+// Using BetterScriptView.swift components
 
 struct ScreenplaySummaryView: View {
     let summary: ScreenplaySummary
@@ -148,7 +151,7 @@ struct ScreenplaySummaryView: View {
                         Button(action: {
                             showingReadAlongView = true
                         }) {
-                            Text("Read Along")
+                            Text("Ready to Read")
                                 .foregroundColor(.white)
                                 .padding(.horizontal, 16)
                                 .padding(.vertical, 8)
@@ -163,9 +166,8 @@ struct ScreenplaySummaryView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .fullScreenCover(isPresented: $showingReadAlongView) {
-            // Get the PDF URL and pass it to the view along with scenes
-            let pdfURL = getDefaultPDFURL()
-            ReadAlongView(pdfURL: pdfURL, scenes: summary.scenes)
+            // Show the BetterScriptView with its default screenplay
+            ScriptParserView()
         }
     }
 }
