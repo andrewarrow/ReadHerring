@@ -249,10 +249,7 @@ extension ContentView {
     }
 }
 
-// Extension to make AVSpeechSynthesizer accessible globally
-extension AVSpeechSynthesizer {
-    static let shared = AVSpeechSynthesizer()
-}
+// AVSpeechSynthesizer.shared is now defined elsewhere in the app
 
 // Embedded VoicesViewWrapper moved to Views/VoicesViewWrapper.swift
 // VoiceRowView moved to Views/VoiceRowView.swift

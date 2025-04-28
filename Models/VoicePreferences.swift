@@ -1,6 +1,11 @@
 import Foundation
 import AVFoundation
 
+// Extension to make AVSpeechSynthesizer accessible globally
+extension AVSpeechSynthesizer {
+    static let shared = AVSpeechSynthesizer()
+}
+
 class VoicePreferences {
     static let shared = VoicePreferences()
     private let hiddenVoicesKey = "hiddenVoices"

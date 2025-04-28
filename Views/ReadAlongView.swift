@@ -35,6 +35,14 @@ class SpeechSynthesizerCoordinator: NSObject, AVSpeechSynthesizerDelegate {
     }
 }
 
+// Struct to hold voice selection state
+struct VoiceSelection: Identifiable {
+    let id = UUID()
+    let voice: AVSpeechSynthesisVoice
+    let name: String
+    var isPlaying: Bool = false
+}
+
 struct ReadAlongView: View {
     var pdfURL: URL
     
@@ -48,6 +56,11 @@ struct ReadAlongView: View {
     @State private var speechSynthesizer = AVSpeechSynthesizer()
     @State private var isPlaying: Bool = false
     @Environment(\.presentationMode) var presentationMode
+    
+    // States for voice selection modal
+    @State private var isVoiceSelectionPresented = false
+    @State private var availableVoices: [VoiceSelection] = []
+    @State private var currentCharacterForVoiceChange: String = ""
     
     // Coordinator for speech synthesizer delegate
     private let speechCoordinator = SpeechSynthesizerCoordinator()
@@ -160,10 +173,55 @@ struct ReadAlongView: View {
                     VStack(alignment: .center, spacing: 4) {
                         // Only show character name for non-narrator content
                         if !isNarrationDialog(dialog) {
-                            Text(dialog.character)
-                                .bold()
-                                .font(.headline)
-                                .padding(.bottom, 5)
+                            HStack {
+                                Text(dialog.character)
+                                    .bold()
+                                    .font(.headline)
+                                
+                                // Display current voice name
+                                if let voice = characterVoices[dialog.character] {
+                                    Text("(\(voice.name))")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+                                
+                                // Button to change voice
+                                Button {
+                                    currentCharacterForVoiceChange = dialog.character
+                                    prepareVoicesForSelection()
+                                    isVoiceSelectionPresented = true
+                                } label: {
+                                    Image(systemName: "speaker.wave.2.circle")
+                                        .foregroundColor(.blue)
+                                }
+                            }
+                            .padding(.bottom, 5)
+                        } else if dialog.character == narratorName {
+                            // Show the narrator with voice name and change option
+                            HStack {
+                                Text("Narrator")
+                                    .bold()
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                                
+                                // Display current voice name
+                                if let voice = characterVoices[narratorName] {
+                                    Text("(\(voice.name))")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+                                
+                                // Button to change voice
+                                Button {
+                                    currentCharacterForVoiceChange = narratorName
+                                    prepareVoicesForSelection()
+                                    isVoiceSelectionPresented = true
+                                } label: {
+                                    Image(systemName: "speaker.wave.2.circle")
+                                        .foregroundColor(.blue)
+                                }
+                            }
+                            .padding(.bottom, 5)
                         }
                         
                         dialogBox(for: dialog)
@@ -204,6 +262,88 @@ struct ReadAlongView: View {
             
             // Begin reading
             readCurrentDialog()
+        }
+        .sheet(isPresented: $isVoiceSelectionPresented) {
+            // Voice Selection Sheet
+            VStack {
+                HStack {
+                    Text("Select Voice")
+                        .font(.headline)
+                        .padding()
+                    
+                    Spacer()
+                    
+                    Button {
+                        isVoiceSelectionPresented = false
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.gray)
+                            .padding()
+                    }
+                }
+                
+                if currentCharacterForVoiceChange == narratorName {
+                    Text("Changing voice for Narrator")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("Changing voice for \(currentCharacterForVoiceChange)")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                
+                List {
+                    ForEach(availableVoices) { voiceSelection in
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(voiceSelection.name)
+                                    .font(.headline)
+                                
+                                Text(voiceSelection.voice.language)
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                
+                                if voiceSelection.voice.quality == .enhanced {
+                                    Text("Premium Voice")
+                                        .font(.caption)
+                                        .foregroundColor(.green)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Color.green.opacity(0.1))
+                                        .cornerRadius(4)
+                                }
+                            }
+                            
+                            Spacer()
+                            
+                            Button {
+                                // Preview the voice
+                                playPreviewVoice(voiceSelection.voice)
+                            } label: {
+                                Image(systemName: voiceSelection.isPlaying ? "stop.circle.fill" : "play.circle.fill")
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: 32, height: 32)
+                                    .foregroundColor(voiceSelection.isPlaying ? .red : .blue)
+                            }
+                            
+                            Button {
+                                // Select this voice for the character
+                                changeCharacterVoice(to: voiceSelection.voice)
+                                isVoiceSelectionPresented = false
+                            } label: {
+                                Text("Select")
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(Color.blue)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(5)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
         }
     }
     
@@ -736,6 +876,82 @@ struct ReadAlongView: View {
         
         // Always read the dialog after moving to a new one
         readCurrentDialog()
+    }
+    
+    // Prepare the available voices for selection
+    private func prepareVoicesForSelection() {
+        // Get all available voices
+        let allVoices = AVSpeechSynthesisVoice.speechVoices()
+        
+        // Get the list of hidden voice IDs from VoicePreferences
+        let hiddenVoices = VoicePreferences.shared.getHiddenVoices()
+        
+        // Filter out hidden voices and focus on English voices
+        let filtered = allVoices.filter { !hiddenVoices.contains($0.identifier) && $0.language.starts(with: "en") }
+        
+        // Convert to VoiceSelection objects
+        availableVoices = filtered.map { voice in
+            VoiceSelection(voice: voice, name: voice.name)
+        }
+        
+        // Sort by quality (enhanced first) then by name
+        availableVoices.sort { (a, b) in
+            if a.voice.quality == b.voice.quality {
+                return a.name < b.name
+            }
+            return a.voice.quality.rawValue > b.voice.quality.rawValue
+        }
+    }
+    
+    // Preview a voice
+    private func playPreviewVoice(_ voice: AVSpeechSynthesisVoice) {
+        // Stop any currently playing speech
+        speechSynthesizer.stopSpeaking(at: .immediate)
+        
+        // Sample text for preview
+        let sampleText = "Hello, I am \(voice.name)."
+        
+        // Update UI to show which voice is playing
+        for index in availableVoices.indices {
+            availableVoices[index].isPlaying = availableVoices[index].voice.identifier == voice.identifier
+        }
+        
+        // Create and configure utterance
+        let utterance = AVSpeechUtterance(string: sampleText)
+        utterance.voice = voice
+        utterance.rate = 0.5
+        utterance.pitchMultiplier = 1.0
+        utterance.volume = 1.0
+        
+        // Start speaking
+        speechSynthesizer.speak(utterance)
+        
+        // Reset the playing state after a short delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            for index in self.availableVoices.indices {
+                if self.availableVoices[index].voice.identifier == voice.identifier {
+                    self.availableVoices[index].isPlaying = false
+                }
+            }
+        }
+    }
+    
+    // Change a character's voice
+    private func changeCharacterVoice(to voice: AVSpeechSynthesisVoice) {
+        // Update the character's voice in the dictionary
+        if currentCharacterForVoiceChange == narratorName {
+            // Update narrator voice
+            narrationVoice = voice
+            characterVoices[narratorName] = voice
+        } else {
+            // Update character voice
+            characterVoices[currentCharacterForVoiceChange] = voice
+        }
+        
+        // Restart reading with the new voice
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.readCurrentDialog()
+        }
     }
 }
 
