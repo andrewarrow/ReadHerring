@@ -658,8 +658,45 @@ struct PDFViewWrapper: UIViewRepresentable {
                 return
             }
             
+            // Special case for title/credits - just go to first page
+            if text.contains("MELTDOWN") && text.contains("FADE IN") {
+                print("DEBUG PDFViewWrapper: Special case for title/credits - going to first page")
+                if let firstPage = pdfDocument.page(at: 0) {
+                    pdfView.go(to: firstPage)
+                    
+                    // Create a general highlight for title area
+                    let bounds = CGRect(x: 50, y: 650, width: 300, height: 50)
+                    let highlight = PDFAnnotation(bounds: bounds, forType: .highlight, withProperties: nil)
+                    highlight.color = UIColor.yellow.withAlphaComponent(0.3)
+                    
+                    let path = UIBezierPath(rect: bounds)
+                    highlight.add(path)
+                    
+                    firstPage.addAnnotation(highlight)
+                    highlightAnnotation = highlight
+                    
+                    lastHighlightedText = text
+                    print("DEBUG PDFViewWrapper: Added special highlight for title")
+                    return
+                }
+            }
+            
+            // Special case for character descriptions
+            var textToUse = text
+            if text.contains("(") && text.contains(")") && text.contains(",") {
+                // This is likely a character description
+                // Try to extract just the character name for highlighting
+                if let nameEndIndex = text.firstIndex(of: "(") {
+                    let nameOnly = String(text[..<nameEndIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !nameOnly.isEmpty {
+                        print("DEBUG PDFViewWrapper: Using character name only: \(nameOnly)")
+                        textToUse = nameOnly 
+                    }
+                }
+            }
+            
             // Clean up text for better matching
-            let cleanText = text.replacingOccurrences(of: "\\(.*?\\)", with: "", options: .regularExpression)
+            let cleanText = textToUse.replacingOccurrences(of: "\\(.*?\\)", with: "", options: .regularExpression)
                              .trimmingCharacters(in: .whitespacesAndNewlines)
                              .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             
@@ -681,25 +718,32 @@ struct PDFViewWrapper: UIViewRepresentable {
             
             // Try to find the text in the document with different search strategies
             
+            // For character dialog, look for just the first part
+            if cleanText.count > 20 && !cleanText.contains("INT.") && !cleanText.contains("EXT.") {
+                // For dialogs, try searching for just the opening words
+                let dialogFirstWords = cleanText.components(separatedBy: " ").prefix(4).joined(separator: " ")
+                if dialogFirstWords.count > 10 {
+                    print("DEBUG PDFViewWrapper: Strategy 0 - First few words of dialog")
+                    if findAndHighlight(exactText: dialogFirstWords, in: pdfView, document: pdfDocument) {
+                        lastHighlightedText = cleanText
+                        print("DEBUG PDFViewWrapper: Highlighting successful with dialog first words")
+                        return
+                    }
+                }
+            }
+            
             // Strategy 1: Direct match
             print("DEBUG PDFViewWrapper: Strategy 1 - Direct match")
             if !findAndHighlight(exactText: cleanText, in: pdfView, document: pdfDocument) {
-                // Strategy 2: Try searching for first 100 chars if text is long
-                if cleanText.count > 100 {
-                    print("DEBUG PDFViewWrapper: Strategy 2 - First 100 chars")
-                    let prefix = String(cleanText.prefix(100))
-                    if !findAndHighlight(exactText: prefix, in: pdfView, document: pdfDocument) {
-                        // Strategy 3: Split into sentences and try to match first sentence
-                        print("DEBUG PDFViewWrapper: Strategy 3 - First sentence")
-                        let sentences = cleanText.components(separatedBy: ". ")
-                        if sentences.count > 0 && !sentences[0].isEmpty {
-                            if !findAndHighlight(exactText: sentences[0], in: pdfView, document: pdfDocument) {
-                                // Strategy 4: Try with just the first 50 characters
-                                print("DEBUG PDFViewWrapper: Strategy 4 - First 50 chars")
-                                let shortPrefix = String(cleanText.prefix(50))
-                                findAndHighlight(exactText: shortPrefix, in: pdfView, document: pdfDocument)
-                            }
-                        }
+                // Strategy 2: Try searching for first part
+                print("DEBUG PDFViewWrapper: Strategy 2 - First part of text")
+                let firstPart = cleanText.components(separatedBy: ".").first ?? cleanText
+                if !findAndHighlight(exactText: firstPart, in: pdfView, document: pdfDocument) {
+                    // Strategy 3: First 30 chars
+                    print("DEBUG PDFViewWrapper: Strategy 3 - First 30 chars")
+                    if cleanText.count > 30 {
+                        let shortText = String(cleanText.prefix(30))
+                        findAndHighlight(exactText: shortText, in: pdfView, document: pdfDocument)
                     }
                 }
             }
@@ -715,16 +759,21 @@ struct PDFViewWrapper: UIViewRepresentable {
         private func findAndHighlight(exactText searchText: String, in pdfView: PDFView, document: PDFDocument) -> Bool {
             print("DEBUG PDFViewWrapper: Searching for text: \(searchText.prefix(50))...")
             
+            // Get just the first important words for more reliable matching
+            let words = searchText.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+            let firstWords = words.prefix(min(5, words.count)).joined(separator: " ")
+            
             // Try several variations of the text for more reliable matching
             let searchVariations = [
                 searchText,
                 searchText.trimmingCharacters(in: .whitespacesAndNewlines),
-                // Try removing any parenthetical content
+                firstWords,
+                // For character dialog, remove speaker direction
                 searchText.replacingOccurrences(of: "\\([^\\)]+\\)", with: "", options: .regularExpression)
                     .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
                     .trimmingCharacters(in: .whitespacesAndNewlines),
-                // Try with just the first part of the text (before any parentheses)
-                searchText.components(separatedBy: "(").first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? searchText
+                // Just the first word if it's substantial
+                words.first ?? searchText
             ]
             
             // Search through each page manually as PDFDocument.findString behavior has changed
@@ -736,26 +785,14 @@ struct PDFViewWrapper: UIViewRepresentable {
                 
                 // Try each variation of the search text
                 for variation in searchVariations {
-                    // Skip empty variations
-                    if variation.isEmpty { continue }
+                    // Skip empty or too small variations
+                    if variation.count < 5 { continue }
                     
-                    // Use fuzzy matching by trying substrings
-                    let searchLengths = [
-                        variation.count,
-                        min(variation.count, 100),
-                        min(variation.count, 50),
-                        min(variation.count, 30)
-                    ]
-                    
-                    for length in searchLengths {
-                        if length < 5 { continue } // Too short to be useful
-                        
-                        let searchSubstring = String(variation.prefix(length))
-                        print("DEBUG PDFViewWrapper: Trying variation: \(searchSubstring.prefix(20))...")
-                        
-                        // Check if this page contains our text
-                        if let range = pageContent.range(of: searchSubstring, options: .caseInsensitive) {
-                            print("DEBUG PDFViewWrapper: Found text match on page \(pageIndex+1)!")
+                    // Just try a single word if it's character name
+                    if variation.uppercased() == variation && variation.count < 20 {
+                        // This might be a character name - just search for it directly
+                        if let range = pageContent.range(of: variation, options: .caseInsensitive) {
+                            print("DEBUG PDFViewWrapper: Found character name match on page \(pageIndex+1)!")
                             
                             // Convert to NSRange for selection
                             let nsRange = NSRange(range, in: pageContent)
@@ -766,7 +803,6 @@ struct PDFViewWrapper: UIViewRepresentable {
                                 
                                 // Get bounds for the selection
                                 let bounds = selection.bounds(for: page)
-                                print("DEBUG PDFViewWrapper: Selection bounds: \(bounds)")
                                 
                                 // Extend the bounds a bit for better visibility
                                 let extendedBounds = CGRect(
@@ -791,11 +827,57 @@ struct PDFViewWrapper: UIViewRepresentable {
                                 page.addAnnotation(highlight)
                                 highlightAnnotation = highlight
                                 
-                                print("DEBUG PDFViewWrapper: Successfully added highlight annotation")
+                                print("DEBUG PDFViewWrapper: Successfully added character highlight annotation")
                                 return true
-                            } else {
-                                print("DEBUG PDFViewWrapper: Could not create selection from range")
                             }
+                        }
+                    }
+                    
+                    // For regular text, try just searching for the beginning
+                    let searchSubstring = String(variation.prefix(min(variation.count, 30)))
+                    
+                    // Check if this page contains our text
+                    if let range = pageContent.range(of: searchSubstring, options: .caseInsensitive) {
+                        print("DEBUG PDFViewWrapper: Found text match on page \(pageIndex+1)!")
+                        
+                        // Convert to NSRange for selection
+                        let nsRange = NSRange(range, in: pageContent)
+                        
+                        // Create selection from the range
+                        if let selection = page.selection(for: nsRange) {
+                            print("DEBUG PDFViewWrapper: Created selection successfully")
+                            
+                            // Get bounds for the selection
+                            let bounds = selection.bounds(for: page)
+                            print("DEBUG PDFViewWrapper: Selection bounds: \(bounds)")
+                            
+                            // Extend the bounds a bit for better visibility
+                            let extendedBounds = CGRect(
+                                x: bounds.origin.x - 2, 
+                                y: bounds.origin.y - 2,
+                                width: bounds.width + 4, 
+                                height: bounds.height + 4
+                            )
+                            
+                            // Scroll to the selection
+                            pdfView.go(to: page)
+                            
+                            // Create a highlight annotation
+                            let highlight = PDFAnnotation(bounds: extendedBounds, forType: .highlight, withProperties: nil)
+                            highlight.color = UIColor.yellow.withAlphaComponent(0.5)
+                            
+                            // Add the path for the bounds
+                            let path = UIBezierPath(rect: extendedBounds)
+                            highlight.add(path)
+                            
+                            // Add to page and save reference
+                            page.addAnnotation(highlight)
+                            highlightAnnotation = highlight
+                            
+                            print("DEBUG PDFViewWrapper: Successfully added highlight annotation")
+                            return true
+                        } else {
+                            print("DEBUG PDFViewWrapper: Could not create selection from range")
                         }
                     }
                 }
