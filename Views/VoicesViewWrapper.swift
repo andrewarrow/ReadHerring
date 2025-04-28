@@ -372,52 +372,14 @@ struct VoicesViewWrapper: View {
     }
     
     private func loadVoices() {
-        let allVoices = AVSpeechSynthesisVoice.speechVoices()
+        // Use CharacterVoices to get the filtered premium/enhanced voices
+        let allVoices = CharacterVoices.shared.getAvailableVoices()
         
-        // Filter to only show English premium/enhanced voices
-        voices = allVoices.filter { voice in
-            // Must be English language
-            guard voice.language.starts(with: "en") else { return false }
-            
-            // Must be enhanced quality or have "premium" in the name
-            return voice.quality == .enhanced || 
-                   voice.name.lowercased().contains("premium") ||
-                   voice.name.lowercased().contains("enhanced")
-        }
-        
-        // Sort by name
-        voices.sort { $0.name < $1.name }
+        // Include all available voices (including ones that will be shown as hidden)
+        voices = allVoices
         
         print("Loaded \(voices.count) premium English voices")
         print("Hidden voices identifiers: \(hiddenVoices)")
-        for voice in voices {
-            let isHidden = hiddenVoices.contains(voice.identifier) ? " (HIDDEN)" : ""
-            print("Voice: \(voice.name), ID: \(voice.identifier), Quality: \(voice.quality.rawValue)\(isHidden)")
-        }
-        
-        // If no voices found, try loading all voices
-        if voices.isEmpty {
-            loadAllVoices()
-        }
-    }
-    
-    // Fallback to load all English voices if no premium voices are available
-    private func loadAllVoices() {
-        let allVoices = AVSpeechSynthesisVoice.speechVoices()
-        
-        // Filter to only show English voices
-        voices = allVoices.filter { $0.language.starts(with: "en") }
-        
-        // Sort by quality first, then by name
-        voices.sort { (voice1, voice2) -> Bool in
-            if voice1.quality == voice2.quality {
-                return voice1.name < voice2.name
-            }
-            return voice1.quality.rawValue > voice2.quality.rawValue
-        }
-        
-        print("Loaded \(voices.count) English voices (all qualities)")
-        print("Hidden voices count: \(hiddenVoices.count)")
         for voice in voices {
             let isHidden = hiddenVoices.contains(voice.identifier) ? " (HIDDEN)" : ""
             print("Voice: \(voice.name), ID: \(voice.identifier), Quality: \(voice.quality.rawValue)\(isHidden)")

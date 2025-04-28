@@ -66,7 +66,7 @@ struct VoiceSelectionView: View {
     }
     
     private func loadVoices() {
-        // Get available voices (not hidden)
+        // Get premium/enhanced voices that aren't hidden
         voices = CharacterVoices.shared.getAvailableVoices()
     }
     
