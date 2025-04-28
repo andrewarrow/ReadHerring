@@ -228,17 +228,22 @@ struct ScriptParserView: View {
     }
     
     private func assignInitialVoices() {
-        // Ensure narrator has a voice
+        // Reset the used voice tracking to ensure we start fresh
+        CharacterVoices.shared.resetUsedVoices()
+        
+        // Ensure narrator has a male voice
         if CharacterVoices.shared.getVoiceFor(character: CharacterVoices.NARRATOR_KEY) == nil {
-            if let randomVoice = CharacterVoices.shared.getRandomVoice() {
-                CharacterVoices.shared.setVoice(character: CharacterVoices.NARRATOR_KEY, voice: randomVoice)
+            if let maleVoice = CharacterVoices.shared.getRandomVoice(gender: "M") {
+                CharacterVoices.shared.setVoice(character: CharacterVoices.NARRATOR_KEY, voice: maleVoice)
             }
         }
         
         // Create a set to keep track of characters we've already processed
         var processedCharacters = Set<String>()
         
-        // Go through all sections and assign voices for character dialogs
+        // First, collect all character names and their genders
+        var characters: [(name: String, gender: String)] = []
+        
         for section in parsedSections {
             if section.type == .character {
                 // Extract character name from first line
@@ -246,16 +251,28 @@ struct ScriptParserView: View {
                 if let firstLine = lines.first {
                     let character = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
                     
-                    // If this character doesn't have a voice yet, assign one based on likely gender
                     if !processedCharacters.contains(character) {
                         // Determine likely gender from character name
                         let gender = detectGenderFromName(character)
-                        
-                        if let voice = CharacterVoices.shared.getVoiceFor(character: character, gender: gender) {
-                            CharacterVoices.shared.setVoice(character: character, voice: voice)
-                            processedCharacters.insert(character)
-                        }
+                        characters.append((name: character, gender: gender))
+                        processedCharacters.insert(character)
                     }
+                }
+            }
+        }
+        
+        // Clear processed characters to reuse when assigning voices
+        processedCharacters.removeAll()
+        
+        // Sort characters by gender to group similar genders together
+        let sortedCharacters = characters.sorted { $0.gender < $1.gender }
+        
+        // Now assign voices to each character
+        for (character, gender) in sortedCharacters {
+            if !processedCharacters.contains(character) {
+                if let voice = CharacterVoices.shared.getVoiceFor(character: character, gender: gender) {
+                    CharacterVoices.shared.setVoice(character: character, voice: voice)
+                    processedCharacters.insert(character)
                 }
             }
         }

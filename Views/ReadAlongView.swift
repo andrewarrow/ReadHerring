@@ -371,8 +371,26 @@ struct ReadAlongView: View {
         // Create a voice selection array we can remove from to avoid duplicates
         var voicePool = availableVoices
         
-        // First assign a dedicated voice for narration (scene headings, descriptions)
-        if let index = voicePool.indices.randomElement() {
+        // First assign a dedicated male voice for narration (scene headings, descriptions)
+        // Filter for male voices first
+        let maleVoices = voicePool.filter { voice in
+            let name = voice.name.lowercased()
+            return name.contains("male") || 
+                   name.contains("man") || 
+                   name.contains("guy") || 
+                   name.contains("boy") ||
+                   (name.contains("tom") && !name.contains("custom"))
+        }
+        
+        if !maleVoices.isEmpty, let index = maleVoices.indices.randomElement() {
+            // Found a male voice
+            narrationVoice = maleVoices[index]
+            // Find and remove from the main pool
+            if let poolIndex = voicePool.firstIndex(where: { $0.identifier == maleVoices[index].identifier }) {
+                voicePool.remove(at: poolIndex)
+            }
+        } else if let index = voicePool.indices.randomElement() {
+            // Fallback to any voice if no male voices found
             narrationVoice = voicePool[index]
             voicePool.remove(at: index)
         }
