@@ -108,140 +108,134 @@ struct ReadAlongView: View {
     var body: some View {
         ZStack {
             // PDF view in the background
-            PDFViewWrapper(pdfURL: pdfURL)
+            PDFViewWrapper(pdfURL: pdfURL, currentDialogText: currentDialog?.text ?? "")
                 .edgesIgnoringSafeArea(.all)
             
-            // Transparent overlay with dialog boxes
+            // Transparent overlay with controls
             VStack {
-                // Close button at top
-                HStack {
-                    Button("← Back") {
-                        presentationMode.wrappedValue.dismiss()
+                // Header with controls at top
+                VStack(spacing: 0) {
+                    // Back button and title row
+                    HStack {
+                        Button("← Back") {
+                            presentationMode.wrappedValue.dismiss()
+                        }
+                        .padding()
+                        .foregroundColor(.blue)
+                        
+                        Spacer()
+                        
+                        Text("Read Along")
+                            .bold()
+                        
+                        Spacer()
+                    }
+                    .background(Color.black.opacity(0.3))
+                    .foregroundColor(.white)
+                    
+                    // Navigation controls at top
+                    HStack {
+                        Button("← Prev") {
+                            moveToPrevious()
+                        }
+                        .disabled(!hasPrevious)
+                        .padding()
+                        .foregroundColor(.blue)
+                        .background(Color.white.opacity(0.8))
+                        .cornerRadius(8)
+                        
+                        Spacer()
+                        
+                        // Play/Pause button
+                        Button(isPlaying ? "Pause" : "Play") {
+                            togglePlayback()
+                        }
+                        .padding()
+                        .foregroundColor(.white)
+                        .background(isPlaying ? Color.red.opacity(0.8) : Color.green.opacity(0.8))
+                        .cornerRadius(8)
+                        
+                        Spacer()
+                        
+                        Button("Next →") {
+                            moveToNext()
+                        }
+                        .disabled(!hasNext)
+                        .padding()
+                        .foregroundColor(.blue)
+                        .background(Color.white.opacity(0.8))
+                        .cornerRadius(8)
                     }
                     .padding()
-                    .foregroundColor(.blue)
-                    
-                    Spacer()
-                    
-                    Text("Read Along")
-                        .bold()
-                    
-                    Spacer()
+                    .background(Color.black.opacity(0.2))
                 }
-                .background(Color.black.opacity(0.3))
-                .foregroundColor(.white)
                 
                 Spacer()
                 
-                // Prev/Play/Next buttons
-                HStack {
-                    Button("← Prev") {
-                        moveToPrevious()
-                    }
-                    .disabled(!hasPrevious)
-                    .padding()
-                    .foregroundColor(.blue)
-                    .background(Color.white.opacity(0.8))
-                    .cornerRadius(8)
+                // Scene counter and voice controls at bottom
+                VStack(spacing: 0) {
+                    // Scene counter
+                    Text("Scene \(currentSceneIndex+1) of \(scenes.count)")
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 12)
+                        .background(Color.black.opacity(0.3))
+                        .foregroundColor(.white)
+                        .cornerRadius(4)
+                        .padding(.bottom, 8)
                     
-                    Spacer()
-                    
-                    // Play/Pause button
-                    Button(isPlaying ? "Pause" : "Play") {
-                        togglePlayback()
-                    }
-                    .padding()
-                    .foregroundColor(.white)
-                    .background(isPlaying ? Color.red.opacity(0.8) : Color.green.opacity(0.8))
-                    .cornerRadius(8)
-                    
-                    Spacer()
-                    
-                    Button("Next →") {
-                        moveToNext()
-                    }
-                    .disabled(!hasNext)
-                    .padding()
-                    .foregroundColor(.blue)
-                    .background(Color.white.opacity(0.8))
-                    .cornerRadius(8)
-                }
-                .padding()
-                
-                // Character name and dialog text
-                if let dialog = currentDialog {
-                    VStack(alignment: .center, spacing: 4) {
-                        // Only show character name for non-narrator content
-                        if !isNarrationDialog(dialog) {
-                            HStack {
+                    // Character voice info at bottom
+                    if let dialog = currentDialog {
+                        HStack {
+                            // Only show character name for non-narrator content
+                            if !isNarrationDialog(dialog) {
                                 Text(dialog.character)
                                     .bold()
                                     .font(.headline)
+                                    .foregroundColor(.white)
                                 
                                 // Display current voice name
                                 if let voice = characterVoices[dialog.character] {
                                     Text("(\(voice.name))")
                                         .font(.caption)
-                                        .foregroundColor(.gray)
+                                        .foregroundColor(.white.opacity(0.8))
                                 }
-                                
-                                // Button to change voice
-                                Button {
-                                    currentCharacterForVoiceChange = dialog.character
-                                    prepareVoicesForSelection()
-                                    isVoiceSelectionPresented = true
-                                } label: {
-                                    Image(systemName: "speaker.wave.2.circle")
-                                        .foregroundColor(.blue)
-                                }
-                            }
-                            .padding(.bottom, 5)
-                        } else if dialog.character == narratorName {
-                            // Show the narrator with voice name and change option
-                            HStack {
+                            } else if dialog.character == narratorName {
                                 Text("Narrator")
                                     .bold()
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
+                                    .font(.headline)
+                                    .foregroundColor(.white)
                                 
                                 // Display current voice name
                                 if let voice = characterVoices[narratorName] {
                                     Text("(\(voice.name))")
                                         .font(.caption)
-                                        .foregroundColor(.gray)
-                                }
-                                
-                                // Button to change voice
-                                Button {
-                                    currentCharacterForVoiceChange = narratorName
-                                    prepareVoicesForSelection()
-                                    isVoiceSelectionPresented = true
-                                } label: {
-                                    Image(systemName: "speaker.wave.2.circle")
-                                        .foregroundColor(.blue)
+                                        .foregroundColor(.white.opacity(0.8))
                                 }
                             }
-                            .padding(.bottom, 5)
+                            
+                            Spacer()
+                            
+                            // Button to change voice
+                            Button {
+                                currentCharacterForVoiceChange = isNarrationDialog(dialog) ? narratorName : dialog.character
+                                prepareVoicesForSelection()
+                                isVoiceSelectionPresented = true
+                            } label: {
+                                HStack {
+                                    Image(systemName: "speaker.wave.2.circle")
+                                    Text("Change Voice")
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.blue)
+                                .foregroundColor(.white)
+                                .cornerRadius(8)
+                            }
                         }
-                        
-                        dialogBox(for: dialog)
-                    }
-                    .padding()
-                } else {
-                    Text("No dialog available")
-                        .italic()
                         .padding()
-                        .background(Color.white.opacity(0.8))
-                        .cornerRadius(8)
+                        .background(Color.black.opacity(0.5))
+                    }
                 }
-                
-                // Scene counter
-                Text("Scene \(currentSceneIndex+1) of \(scenes.count)")
-                    .padding()
-                    .background(Color.black.opacity(0.3))
-                    .foregroundColor(.white)
-                    .cornerRadius(4)
-                    .padding(.bottom)
             }
         }
         .onAppear {
@@ -347,6 +341,8 @@ struct ReadAlongView: View {
         }
     }
     
+    // This function isn't needed anymore since we're highlighting text directly on the PDF
+    // Kept for reference, but can be removed later
     @ViewBuilder
     private func dialogBox(for dialog: Scene.Dialog) -> some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -955,9 +951,90 @@ struct ReadAlongView: View {
     }
 }
 
-// Wrapper for UIKit's PDFView
+// Wrapper for UIKit's PDFView with text highlighting
 struct PDFViewWrapper: UIViewRepresentable {
     let pdfURL: URL
+    let currentDialogText: String
+    
+    // Coordinator to handle PDF selection and highlighting
+    class Coordinator: NSObject {
+        var parent: PDFViewWrapper
+        var highlightAnnotation: PDFAnnotation?
+        var selectionPaths: [UIBezierPath] = []
+        
+        init(parent: PDFViewWrapper) {
+            self.parent = parent
+        }
+        
+        // Create highlight rectangles around text
+        func highlightText(_ text: String, in pdfView: PDFView) {
+            guard !text.isEmpty, let pdfDocument = pdfView.document else { return }
+            
+            // Remove any existing highlight
+            if let highlight = highlightAnnotation, let page = highlight.page {
+                page.removeAnnotation(highlight)
+                highlightAnnotation = nil
+            }
+            
+            // Search for text in PDF
+            let cleanText = text.replacingOccurrences(of: "\\(.*?\\)", with: "", options: .regularExpression)
+                                .trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            if cleanText.isEmpty { return }
+            
+            // Track which page and selection we find
+            var foundPage: PDFPage?
+            var selectionRects: [CGRect] = []
+            
+            // Search each page for the text
+            for i in 0..<pdfDocument.pageCount {
+                guard let page = pdfDocument.page(at: i) else { continue }
+                let pageString = page.string ?? ""
+                
+                // Try to find the text in this page
+                if let range = pageString.range(of: cleanText, options: .caseInsensitive) {
+                    // Calculate character indices for NSRange
+                    let nsRange = NSRange(range, in: pageString)
+                    
+                    // Use PDFKit's selection from string range
+                    if let selection = page.selection(for: nsRange) {
+                        // Get bounding boxes for the selection
+                        let bounds = selection.bounds(for: page)
+                        // Save the page and bounds
+                        foundPage = page
+                        selectionRects = [bounds]
+                        
+                        // Scroll to this page and highlight the text
+                        pdfView.go(to: page)
+                        break
+                    }
+                }
+            }
+            
+            // If we found the text, highlight it
+            if let page = foundPage, !selectionRects.isEmpty {
+                // Create highlight annotation
+                let highlight = PDFAnnotation(bounds: selectionRects.first!, forType: .highlight, withProperties: nil)
+                highlight.color = UIColor.yellow.withAlphaComponent(0.3)
+                
+                // Create selection rectangle paths
+                selectionPaths = []
+                for rect in selectionRects {
+                    let path = UIBezierPath(rect: rect)
+                    selectionPaths.append(path)
+                    highlight.add(path)
+                }
+                
+                // Add to page and save reference
+                page.addAnnotation(highlight)
+                highlightAnnotation = highlight
+            }
+        }
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
     
     func makeUIView(context: Context) -> PDFView {
         let pdfView = PDFView()
@@ -986,6 +1063,11 @@ struct PDFViewWrapper: UIViewRepresentable {
         // Update PDF if URL changes
         if let document = PDFDocument(url: pdfURL) {
             uiView.document = document
+        }
+        
+        // Highlight the current text
+        DispatchQueue.main.async {
+            context.coordinator.highlightText(currentDialogText, in: uiView)
         }
     }
 }
