@@ -135,11 +135,17 @@ struct ScriptParserView: View {
         guard let voice = CharacterVoices.shared.getVoiceFor(character: character) else { return }
         
         // Clean text by removing stage directions (text in parentheses)
-        let cleanTextToSpeak = textToSpeak.replacingOccurrences(
+        var cleanTextToSpeak = textToSpeak.replacingOccurrences(
             of: "\\(.*?\\)",
             with: "",
             options: .regularExpression
         ).trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Replace INT. with "interior" and EXT. with "exterior" for narration
+        if character == CharacterVoices.NARRATOR_KEY {
+            cleanTextToSpeak = cleanTextToSpeak.replacingOccurrences(of: "INT.", with: "Interior")
+            cleanTextToSpeak = cleanTextToSpeak.replacingOccurrences(of: "EXT.", with: "Exterior")
+        }
         
         // Create and configure the utterance
         let utterance = AVSpeechUtterance(string: cleanTextToSpeak)

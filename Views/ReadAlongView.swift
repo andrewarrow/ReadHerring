@@ -439,11 +439,17 @@ struct ReadAlongView: View {
         print("DEBUG ReadAlongView: Character: \(dialog.character), Text: \(dialog.text.prefix(100))...")
         
         // Clean text by removing stage directions (text in parentheses)
-        let cleanText = dialog.text.replacingOccurrences(
+        var cleanText = dialog.text.replacingOccurrences(
             of: "\\(.*?\\)",
             with: "",
             options: .regularExpression
         ).trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Replace INT. with "interior" and EXT. with "exterior" for narration
+        if dialog.character == narratorName {
+            cleanText = cleanText.replacingOccurrences(of: "INT.", with: "Interior")
+            cleanText = cleanText.replacingOccurrences(of: "EXT.", with: "Exterior")
+        }
         
         print("DEBUG ReadAlongView: Cleaned text length: \(cleanText.count) chars")
         
