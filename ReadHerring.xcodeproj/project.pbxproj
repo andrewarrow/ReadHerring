@@ -7,11 +7,15 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		001E37942DBFAAC500CFB28E /* PDFProcessorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37922DBFAAC500CFB28E /* PDFProcessorView.swift */; };
+		001E37952DBFAAC500CFB28E /* ScriptParserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37932DBFAAC500CFB28E /* ScriptParserView.swift */; };
 		AA0000000000000000000001 /* ReadHerringApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000011 /* ReadHerringApp.swift */; };
 		AA0000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000012 /* ContentView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		001E37922DBFAAC500CFB28E /* PDFProcessorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFProcessorView.swift; sourceTree = "<group>"; };
+		001E37932DBFAAC500CFB28E /* ScriptParserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScriptParserView.swift; sourceTree = "<group>"; };
 		AA0000000000000000000010 /* ReadHerring.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ReadHerring.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000011 /* ReadHerringApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadHerringApp.swift; sourceTree = "<group>"; };
 		AA0000000000000000000012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -48,6 +52,8 @@
 		AA0000000000000000000032 /* ReadHerring */ = {
 			isa = PBXGroup;
 			children = (
+				001E37922DBFAAC500CFB28E /* PDFProcessorView.swift */,
+				001E37932DBFAAC500CFB28E /* ScriptParserView.swift */,
 				AA0000000000000000000011 /* ReadHerringApp.swift */,
 				AA0000000000000000000012 /* ContentView.swift */,
 				AA0000000000000000000013 /* Info.plist */,
@@ -122,6 +128,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				001E37942DBFAAC500CFB28E /* PDFProcessorView.swift in Sources */,
+				001E37952DBFAAC500CFB28E /* ScriptParserView.swift in Sources */,
 				AA0000000000000000000002 /* ContentView.swift in Sources */,
 				AA0000000000000000000001 /* ReadHerringApp.swift in Sources */,
 			);
@@ -254,6 +262,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 755R3VBZ84;
 				INFOPLIST_FILE = "$(SRCROOT)/Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -273,6 +282,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 755R3VBZ84;
 				INFOPLIST_FILE = "$(SRCROOT)/Info.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
