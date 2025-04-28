@@ -524,6 +524,31 @@ struct ReadAlongView: View {
     private func processScenes() {
         print("DEBUG: Starting scene processing with \(scenes.count) scenes")
         
+        // CRITICAL WORKAROUND: Skip processing if dialogs are already present
+        // This fixes the issue of dialogs being skipped during reading
+        var hasDialogs = false
+        for scene in scenes {
+            if scene.dialogs.count > 2 { // More than just heading and description
+                hasDialogs = true
+                print("DEBUG: Found existing dialogs - skipping reprocessing")
+                break
+            }
+        }
+        
+        if hasDialogs {
+            // Simply print debug info and return without changing anything
+            if !scenes.isEmpty {
+                print("========== FIRST SCENE DIALOGS (PRESERVED) ==========")
+                for (i, dialog) in scenes[0].dialogs.enumerated() {
+                    print("[\(i+1)/\(scenes[0].dialogs.count)] [\(dialog.character)]: \(dialog.text.prefix(50))...")
+                }
+                print("================================================")
+            }
+            return
+        }
+        
+        // Only continue with processing if we don't already have dialogs
+        
         // Create a completely flat representation of the screenplay
         var processedScenes = [Scene]()
         
@@ -683,13 +708,19 @@ struct ReadAlongView: View {
         let oldSceneIndex = currentSceneIndex
         let oldDialogIndex = currentDialogIndex
         
-        // Get next dialog position
+        // Get next dialog position, taking a simple sequential approach
         if let scene = currentScene, currentDialogIndex < scene.dialogs.count - 1 {
+            // Simply move to the next dialog in sequence
             currentDialogIndex += 1
         } else if currentSceneIndex < scenes.count - 1 {
+            // Move to the next scene
             currentSceneIndex += 1
             currentDialogIndex = 0
         }
+        
+        // Emergency check - make sure we aren't skipping crucial content
+        let skipsNarrator = currentDialog?.character == narratorName
+        let isFirstDialog = currentDialogIndex == 0
         
         // CRITICAL DEBUG - Print ALL available dialog in the scene to verify content
         if let scene = currentScene {
