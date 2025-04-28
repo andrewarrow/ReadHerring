@@ -1,69 +1,11 @@
 import SwiftUI
+import PDFKit
 
 struct ScriptParserView: View {
-    @State private var screenplayText = """
-                              STARTUP MELTDOWN
-
-                           Written by Assistant
-
-
-
-
-FADE IN:
-
-INT. TECH STARTUP OFFICE - MORNING
-
-The office is buzzing with nervous energy. Banners reading
-"LAUNCH DAY!" hang everywhere. SARAH (30s, CEO, stressed but
-trying to appear calm) paces while checking her phone.
-
-                         SARAH
-          Has anyone seen the demo unit?
-          Anyone?
-
-MIKE (20s, software engineer, disheveled) rushes in, coffee
-stains on his shirt.
-
-                         MIKE
-          I swear I put it in the conference
-          room last night!
-
-JESSICA (30s, marketing director, perpetually optimistic)
-bounds in carrying a box of promotional swag.
-
-                         JESSICA
-          Don't worry! I have backup units.
-          Well, they're prototypes from six
-          months ago, but they're basically
-          the same thing, right?
-
-                         SARAH
-                    (horrified)
-          The ones that catch fire?
-
-DAVID (40s, CFO, always with a calculator) enters, looking
-pale.
-
-                         DAVID
-          Speaking of fire, our insurance
-          company just called. Apparently,
-          they're concerned about our
-          "history of combustible
-          presentations."
-
-EMILY (20s, PR manager, fashion-forward) struts in while on
-the phone.
-
-                         EMILY
-                    (into phone)
-          No, TechCrunch, we're NOT the
-          company that accidentally sent
-          10,000 units to a goat farm...
-          Okay, maybe we are.
-"""
-    
+    @State private var screenplayText: String = ""
     @State private var parsedSections: [ScriptSection] = []
     @State private var currentSectionIndex = 0
+    @State private var isLoading: Bool = true
     
     var body: some View {
         VStack {
@@ -71,7 +13,13 @@ the phone.
                 .font(.largeTitle)
                 .padding()
             
-            if !parsedSections.isEmpty {
+            if isLoading {
+                ProgressView("Loading PDF...")
+                    .padding()
+                    .onAppear {
+                        loadPDFContent()
+                    }
+            } else if !parsedSections.isEmpty {
                 // Display the current section
                 ScriptSectionView(section: parsedSections[currentSectionIndex])
                     .padding()
@@ -117,6 +65,141 @@ the phone.
         }
     }
     
+    private func loadPDFContent() {
+        print("DEBUG: Starting PDF content loading...")
+        // Get document directory URL
+        let fileManager = FileManager.default
+        let documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let pdfURL = documentsDirectory.appendingPathComponent("fade.pdf")
+        
+        print("DEBUG: Looking for PDF at \(pdfURL.path)")
+        // If PDF doesn't exist in Documents directory, look in the bundle
+        if !fileManager.fileExists(atPath: pdfURL.path),
+           let bundleURL = Bundle.main.url(forResource: "fade", withExtension: "pdf") {
+            do {
+                try fileManager.copyItem(at: bundleURL, to: pdfURL)
+                print("DEBUG: Copied PDF from bundle to \(pdfURL.path)")
+            } catch {
+                print("DEBUG: Failed to copy PDF from bundle: \(error.localizedDescription)")
+            }
+        }
+        
+        // Load PDF document
+        if let pdf = PDFDocument(url: pdfURL) {
+            print("DEBUG: Successfully loaded PDF with \(pdf.pageCount) pages")
+            var fullText = ""
+            
+            // Extract text from each page
+            for i in 0..<pdf.pageCount {
+                if let page = pdf.page(at: i) {
+                    let pageText = page.string ?? ""
+                    
+                    if !pageText.isEmpty {
+                        print("DEBUG: Page \(i+1) has \(pageText.count) characters of text")
+                        fullText += pageText + "\n"
+                    } else {
+                        print("DEBUG: Page \(i+1) has no text, using OCR")
+                        // Use OCR for this page if no text is available
+                        let pageImage = page.thumbnail(of: CGSize(width: 1024, height: 1024), for: .mediaBox)
+                        if pageImage.cgImage != nil {
+                            let ocrText = PDFProcessor.performOCR(on: pageImage)
+                            print("DEBUG: OCR extracted \(ocrText.count) characters")
+                            fullText += ocrText + "\n"
+                        }
+                    }
+                }
+            }
+            
+            print("DEBUG: Total extracted text: \(fullText.count) characters")
+            print("DEBUG: First 100 chars: \(String(fullText.prefix(100)))")
+            
+            // Debug format comparison with hardcoded example
+            analyzeTextFormatting(pdfText: fullText)
+            
+            // Update state with the PDF content
+            screenplayText = fullText
+            parsedSections = parseScreenplay(fullText)
+            print("DEBUG: Parsed into \(parsedSections.count) sections")
+            
+            // Debug the first few sections
+            for (index, section) in parsedSections.prefix(3).enumerated() {
+                print("DEBUG: Section \(index + 1) - Type: \(section.type), Length: \(section.text.count) chars")
+                print("DEBUG: Section \(index + 1) - Preview: \(section.text.prefix(50))")
+            }
+            
+            isLoading = false
+        } else {
+            print("DEBUG: Failed to load PDF document")
+            // If PDF loading failed, use a fallback text for testing
+            screenplayText = "Failed to load PDF content"
+            parsedSections = parseScreenplay(screenplayText)
+            isLoading = false
+        }
+    }
+    
+    private func analyzeTextFormatting(pdfText: String) {
+        // Create a sample of hardcoded screenplay text (known to work)
+        let sampleText = """
+                              STARTUP MELTDOWN
+
+                           Written by Assistant
+
+
+
+FADE IN:
+
+INT. TECH STARTUP OFFICE - MORNING
+
+The office is buzzing with nervous energy. Banners reading
+"LAUNCH DAY!" hang everywhere. SARAH (30s, CEO, stressed but
+trying to appear calm) paces while checking her phone.
+
+                         SARAH
+          Has anyone seen the demo unit?
+          Anyone?
+"""
+        
+        print("\nDEBUG: === FORMAT COMPARISON ===")
+        
+        // Compare first few lines to see differences
+        let sampleLines = sampleText.components(separatedBy: .newlines).prefix(15)
+        let pdfLines = pdfText.components(separatedBy: .newlines).prefix(15)
+        
+        print("DEBUG: Sample (hardcoded) format:")
+        for (i, line) in sampleLines.enumerated() {
+            print("DEBUG: Sample[\(i)]: '\(line.replacingOccurrences(of: " ", with: "·"))'")
+        }
+        
+        print("\nDEBUG: PDF format:")
+        for (i, line) in pdfLines.enumerated() {
+            print("DEBUG: PDF[\(i)]: '\(line.replacingOccurrences(of: " ", with: "·"))'")
+        }
+        
+        // Check for character name formatting
+        let sampleCharLines = sampleText.components(separatedBy: .newlines).filter { line in
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.range(of: "^[A-Z0-9 ()]+$", options: .regularExpression) != nil && 
+                   line.contains("         ")
+        }
+        
+        let pdfCharLines = pdfText.components(separatedBy: .newlines).filter { line in
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.range(of: "^[A-Z0-9 ()]+$", options: .regularExpression) != nil
+        }
+        
+        print("\nDEBUG: Sample character lines (with centering):")
+        for line in sampleCharLines.prefix(3) {
+            print("DEBUG: '\(line.replacingOccurrences(of: " ", with: "·"))'")
+        }
+        
+        print("\nDEBUG: PDF potential character lines (all caps):")
+        for line in pdfCharLines.prefix(10) {
+            print("DEBUG: '\(line.replacingOccurrences(of: " ", with: "·"))'")
+        }
+        
+        print("\nDEBUG: === END FORMAT COMPARISON ===\n")
+    }
+    
     private func nextSection() {
         if currentSectionIndex < parsedSections.count - 1 {
             currentSectionIndex += 1
@@ -130,16 +213,20 @@ the phone.
     }
     
     private func parseScreenplay(_ text: String) -> [ScriptSection] {
+        print("DEBUG: Starting screenplay parsing for text of length \(text.count)")
         var sections: [ScriptSection] = []
         var currentSectionText = ""
         var currentSectionType: SectionType = .narrator
         
         // Split the text into lines for processing
         let lines = text.components(separatedBy: .newlines)
+        print("DEBUG: Split text into \(lines.count) lines")
         
         // Track if we've seen a scene heading (INT./EXT.) and dialog after it
         var seenSceneHeading = false
         var seenDialogAfterSceneHeading = false
+        var characterLinesFound = 0
+        var sceneHeadingsFound = 0
         
         var i = 0
         while i < lines.count {
@@ -153,31 +240,42 @@ the phone.
             }
             
             // Check for scene headings (INT./EXT.)
-            if !seenSceneHeading && (trimmedLine.starts(with: "INT.") || trimmedLine.starts(with: "EXT.") || trimmedLine.starts(with: "INT ") || trimmedLine.starts(with: "EXT ")) {
+            let isSceneHeading = !seenSceneHeading && (trimmedLine.starts(with: "INT.") || trimmedLine.starts(with: "EXT.") || trimmedLine.starts(with: "INT ") || trimmedLine.starts(with: "EXT "))
+            if isSceneHeading {
                 seenSceneHeading = true
+                sceneHeadingsFound += 1
+                print("DEBUG: Found scene heading at line \(i): \(trimmedLine)")
             }
             
             // Check if this line indicates a character's dialog
-            if isCharacterLine(line) {
+            let isCharLine = isCharacterLine(line)
+            if isCharLine {
+                characterLinesFound += 1
+                print("DEBUG: Found character line at line \(i): \(trimmedLine)")
+                
                 // If this is the first dialog after a scene heading, finish the initial narrator section
                 if seenSceneHeading && !seenDialogAfterSceneHeading {
                     seenDialogAfterSceneHeading = true
+                    print("DEBUG: Marking first dialog after scene heading")
                     
                     // Add everything we've seen so far as the first narrator section
                     if !currentSectionText.isEmpty {
                         sections.append(ScriptSection(type: .narrator, text: currentSectionText))
+                        print("DEBUG: Added narrator section with \(currentSectionText.count) chars")
                         currentSectionText = ""
                     }
                 } else if seenDialogAfterSceneHeading {
                     // For subsequent dialogs, close any narrator section in progress
                     if !currentSectionText.isEmpty && currentSectionType == .narrator {
                         sections.append(ScriptSection(type: .narrator, text: currentSectionText))
+                        print("DEBUG: Added subsequent narrator section with \(currentSectionText.count) chars")
                         currentSectionText = ""
                     }
                 }
                 
                 // If we haven't seen a scene heading yet, just continue accumulating into the initial narrator block
                 if !seenSceneHeading || !seenDialogAfterSceneHeading {
+                    print("DEBUG: Not processing character line yet, adding to narrator section")
                     currentSectionText += line + "\n"
                     i += 1
                     continue
@@ -191,18 +289,27 @@ the phone.
                 i += 1
                 
                 // Check if the next line is a parenthetical
-                if i < lines.count && isParentheticalLine(lines[i]) {
+                let hasParenthetical = i < lines.count && isParentheticalLine(lines[i])
+                if hasParenthetical {
+                    print("DEBUG: Found parenthetical: \(lines[i])")
                     dialogText += lines[i] + "\n"
                     i += 1
                 }
                 
                 // Collect dialog content
+                var dialogLineCount = 0
                 while i < lines.count && !isCharacterLine(lines[i]) && !lines[i].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    // Debug the exact line content with representation of whitespace
+                    let debugLine = lines[i].replacingOccurrences(of: " ", with: "·")
+                    print("DEBUG: Dialog line: '\(debugLine)'")
                     dialogText += lines[i] + "\n"
+                    dialogLineCount += 1
                     i += 1
                 }
+                print("DEBUG: Collected \(dialogLineCount) lines of dialog for character \(characterName)")
                 
                 sections.append(ScriptSection(type: .character, text: dialogText))
+                print("DEBUG: Added character section with \(dialogText.count) chars")
                 continue // Skip the normal increment
             } else {
                 // This is part of the narrator text
@@ -221,20 +328,55 @@ the phone.
         // Add any remaining section
         if !currentSectionText.isEmpty {
             sections.append(ScriptSection(type: currentSectionType, text: currentSectionText))
+            print("DEBUG: Added final section with \(currentSectionText.count) chars")
         }
         
+        print("DEBUG: Parsing completed. Found \(sceneHeadingsFound) scene headings and \(characterLinesFound) character lines")
+        print("DEBUG: Created \(sections.count) total sections")
         return sections
     }
     
     private func isCharacterLine(_ line: String) -> Bool {
         let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // Check if the line is a character name (all caps, centered)
-        let isCharacter = trimmedLine.count > 0 && 
-                          line.contains("         ") && // Multiple spaces indicating centering
-                          trimmedLine.range(of: "^[A-Z0-9 ()]+$", options: .regularExpression) != nil
+        // Skip empty lines
+        if trimmedLine.isEmpty {
+            return false
+        }
         
-        return isCharacter
+        // Character name criteria:
+        // 1. All caps (traditional screenplay format)
+        let isAllCaps = trimmedLine == trimmedLine.uppercased() && 
+                        trimmedLine.range(of: "^[A-Z0-9 .,'()\\-]+$", options: .regularExpression) != nil
+        
+        // 2. Length is reasonable for a name (not too long, not too short)
+        let hasReasonableLength = trimmedLine.count >= 2 && trimmedLine.count <= 35
+        
+        // 3. Either has centering spaces (traditional format) or is a standalone name (PDF format)
+        let hasLeadingSpaces = line.contains("         ") // Multiple spaces indicating centering in hardcoded format
+        let isPotentialCharName = !trimmedLine.contains(".") || 
+                                 (trimmedLine.contains("(") && trimmedLine.contains(")"))
+        
+        // Combine criteria - either properly centered or PDF-style all caps name
+        let isHardcodedFormat = hasLeadingSpaces && isAllCaps && hasReasonableLength
+        let isPDFFormat = isAllCaps && hasReasonableLength && isPotentialCharName && 
+                         !trimmedLine.starts(with: "INT") && !trimmedLine.starts(with: "EXT") &&
+                         !trimmedLine.starts(with: "FADE")
+        
+        // Debug info
+        if isAllCaps && hasReasonableLength && !hasLeadingSpaces && !isPDFFormat {
+            print("DEBUG: Rejected potential PDF character name: \(trimmedLine)")
+        }
+        
+        if isHardcodedFormat {
+            print("DEBUG: Found hardcoded-style character line: \(trimmedLine)")
+        }
+        
+        if isPDFFormat && !isHardcodedFormat {
+            print("DEBUG: Found PDF-style character line: \(trimmedLine)")
+        }
+        
+        return isHardcodedFormat || isPDFFormat
     }
     
     private func isParentheticalLine(_ line: String) -> Bool {
