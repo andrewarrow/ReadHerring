@@ -2,19 +2,64 @@ import SwiftUI
 import PDFKit
 import AVFoundation
 
+// Class-based speech synthesizer coordinator to handle delegate methods
+class SpeechSynthesizerCoordinator: NSObject, AVSpeechSynthesizerDelegate {
+    var isPlaying: Bool = false {
+        didSet {
+            // Update the binding when state changes
+            playingStateChanged?(isPlaying)
+        }
+    }
+    
+    // Callback for when playing state changes
+    var playingStateChanged: ((Bool) -> Void)?
+    
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        isPlaying = false
+    }
+    
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
+        isPlaying = true
+    }
+    
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        isPlaying = false
+    }
+    
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didPause utterance: AVSpeechUtterance) {
+        isPlaying = false
+    }
+    
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didContinue utterance: AVSpeechUtterance) {
+        isPlaying = true
+    }
+}
+
 struct ReadAlongView: View {
     var pdfURL: URL
-    var scenes: [Scene]
+    
+    // Make scenes mutable with @State
+    @State private var scenes: [Scene]
     
     @State private var currentSceneIndex: Int = 0
     @State private var currentDialogIndex: Int = 0
     @State private var characterVoices: [String: AVSpeechSynthesisVoice] = [:]
     @State private var narrationVoice: AVSpeechSynthesisVoice?
     @State private var speechSynthesizer = AVSpeechSynthesizer()
+    @State private var isPlaying: Bool = false
     @Environment(\.presentationMode) var presentationMode
+    
+    // Coordinator for speech synthesizer delegate
+    private let speechCoordinator = SpeechSynthesizerCoordinator()
     
     // Special narrator name for scene headings and descriptions
     private let narratorName = "NARRATOR"
+    
+    // Custom initializer to handle the State property
+    init(pdfURL: URL, scenes: [Scene]) {
+        self.pdfURL = pdfURL
+        self._scenes = State(initialValue: scenes)
+    }
     
     private var currentScene: Scene? {
         guard !scenes.isEmpty, currentSceneIndex < scenes.count else {
@@ -75,7 +120,7 @@ struct ReadAlongView: View {
                 
                 Spacer()
                 
-                // Prev/Next buttons
+                // Prev/Play/Next buttons
                 HStack {
                     Button("← Prev") {
                         moveToPrevious()
@@ -84,6 +129,17 @@ struct ReadAlongView: View {
                     .padding()
                     .foregroundColor(.blue)
                     .background(Color.white.opacity(0.8))
+                    .cornerRadius(8)
+                    
+                    Spacer()
+                    
+                    // Play/Pause button
+                    Button(isPlaying ? "Pause" : "Play") {
+                        togglePlayback()
+                    }
+                    .padding()
+                    .foregroundColor(.white)
+                    .background(isPlaying ? Color.red.opacity(0.8) : Color.green.opacity(0.8))
                     .cornerRadius(8)
                     
                     Spacer()
@@ -137,6 +193,15 @@ struct ReadAlongView: View {
             // Assign voices to characters and narrator
             assignVoices()
             
+            // Set coordinator as the delegate and sync state
+            speechSynthesizer.delegate = speechCoordinator
+            
+            // Set up state binding
+            speechCoordinator.playingStateChanged = { newState in
+                // Update the view's state when coordinator changes
+                isPlaying = newState
+            }
+            
             // Begin reading
             readCurrentDialog()
         }
@@ -147,11 +212,24 @@ struct ReadAlongView: View {
         VStack(alignment: .leading, spacing: 4) {
             // Check if this is narrator content (scene heading or description)
             if isNarrationDialog(dialog) {
-                // Render narrator content with different styling
-                Text(dialog.text)
-                    .italic()
-                    .foregroundColor(dialog.text == dialog.text.uppercased() ? .blue : .gray)
-                    .font(dialog.text == dialog.text.uppercased() ? .headline : .body)
+                // For narration, check if it contains character descriptions
+                // and format accordingly
+                if dialog.text.contains("(") && containsCharacterName(dialog.text) {
+                    // This is likely a character description, format it specially
+                    formatCharacterDescription(dialog.text)
+                } else if dialog.text == dialog.text.uppercased() {
+                    // This is a scene heading (ALL CAPS)
+                    Text(dialog.text)
+                        .italic()
+                        .foregroundColor(.blue)
+                        .font(.headline)
+                } else {
+                    // Regular narration
+                    Text(dialog.text)
+                        .italic()
+                        .foregroundColor(.gray)
+                        .font(.body)
+                }
             } else {
                 // Handle character dialog with stage directions
                 ForEach(splitTextForDisplay(dialog.text), id: \.self) { part in
@@ -174,6 +252,64 @@ struct ReadAlongView: View {
         .cornerRadius(4)
         .frame(maxWidth: 500)
         .background(isNarrationDialog(dialog) ? Color.black.opacity(0.05) : Color.white)
+    }
+    
+    // Check if text contains a character name (all uppercase word)
+    private func containsCharacterName(_ text: String) -> Bool {
+        let words = text.components(separatedBy: .whitespacesAndNewlines)
+        return words.contains { word in
+            let trimmed = word.trimmingCharacters(in: .punctuationCharacters)
+            return trimmed.count > 1 && trimmed == trimmed.uppercased()
+        }
+    }
+    
+    // Format text with character descriptions
+    @ViewBuilder
+    private func formatCharacterDescription(_ text: String) -> some View {
+        // Look for pattern: CHARACTER_NAME (description) action
+        let pattern = "([A-Z][A-Z\\s]+)\\s*\\(([^\\)]+)\\)\\s*(.*)"
+        
+        if let regex = try? NSRegularExpression(pattern: pattern),
+           let match = regex.firstMatch(in: text, range: NSRange(location: 0, length: text.count)) {
+            
+            let nsString = text as NSString
+            
+            // Extract the parts
+            let characterName = match.range(at: 1).location != NSNotFound ?
+                              nsString.substring(with: match.range(at: 1)) : ""
+            
+            let description = match.range(at: 2).location != NSNotFound ?
+                            nsString.substring(with: match.range(at: 2)) : ""
+            
+            let action = match.range(at: 3).location != NSNotFound ?
+                       nsString.substring(with: match.range(at: 3)) : ""
+            
+            // Format with different styles for each part
+            VStack(alignment: .leading, spacing: 2) {
+                if !characterName.isEmpty {
+                    Text(characterName)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                }
+                
+                if !description.isEmpty {
+                    Text("(\(description))")
+                        .italic()
+                        .foregroundColor(.gray)
+                }
+                
+                if !action.isEmpty {
+                    Text(action)
+                        .foregroundColor(.gray)
+                        .italic()
+                }
+            }
+        } else {
+            // Fallback for unmatched text
+            Text(text)
+                .italic()
+                .foregroundColor(.gray)
+        }
     }
     
     private func splitTextForDisplay(_ text: String) -> [String] {
@@ -305,7 +441,11 @@ struct ReadAlongView: View {
         ).trimmingCharacters(in: .whitespacesAndNewlines)
         
         // Skip if nothing to read
-        if cleanText.isEmpty { return }
+        if cleanText.isEmpty { 
+            // Move to the next dialog if this one is empty
+            moveToNext()
+            return 
+        }
         
         // Stop any ongoing speech
         speechSynthesizer.stopSpeaking(at: .immediate)
@@ -332,8 +472,27 @@ struct ReadAlongView: View {
         utterance.pitchMultiplier = 1.0
         utterance.volume = 1.0
         
+        // The speaking state will be updated by the delegate
         // Start speaking
         speechSynthesizer.speak(utterance)
+    }
+    
+    // Toggle speech playback between play and pause
+    private func togglePlayback() {
+        if isPlaying {
+            // Pause speech
+            speechSynthesizer.pauseSpeaking(at: .word)
+            // The delegate will update both isPlaying states
+        } else {
+            if speechSynthesizer.isPaused {
+                // Resume paused speech
+                speechSynthesizer.continueSpeaking()
+                // The delegate will update both isPlaying states
+            } else {
+                // Start fresh if not paused
+                readCurrentDialog()
+            }
+        }
     }
     
     // Helper to determine if a dialog should be read by the narrator
@@ -346,43 +505,203 @@ struct ReadAlongView: View {
                dialog.character.contains("SCENE")
     }
     
-    // Process scenes to ensure they have heading and description narration
+    // Process scenes to properly structure screenplay content
     private func processScenes() {
-        for (index, scene) in scenes.enumerated() {
-            // Check if scene already has narrator dialog entries
-            let hasNarratorEntries = scene.dialogs.contains { dialog in
-                return dialog.character == narratorName
+        // Create new array for processed scenes
+        var processedScenes = [Scene]()
+        
+        // Extract titles and credts
+        let titleCredits = findTitleAndCredits()
+        
+        // Process each scene individually
+        for sceneIndex in 0..<scenes.count {
+            let originalScene = scenes[sceneIndex]
+            
+            // Create a new scene to work with
+            let newScene = Scene(
+                heading: originalScene.heading,
+                description: originalScene.description,
+                location: originalScene.location,
+                timeOfDay: originalScene.timeOfDay,
+                sceneNumber: originalScene.sceneNumber
+            )
+            
+            // Storage for organized dialogs
+            var sequencedDialogs: [Scene.Dialog] = []
+            
+            // 1. If this is the first scene, add title/credits
+            if sceneIndex == 0 && !titleCredits.isEmpty {
+                sequencedDialogs.append(Scene.Dialog(character: narratorName, text: titleCredits))
             }
             
-            // If no narrator entries, add them for heading and description
-            if !hasNarratorEntries {
-                // Add scene heading as dialog from narrator if not empty
-                if !scene.heading.isEmpty {
-                    let headingDialog = Scene.Dialog(character: narratorName, text: scene.heading)
-                    
-                    // Insert at beginning of dialog list
-                    if !scene.dialogs.isEmpty {
-                        scene.dialogs.insert(headingDialog, at: 0)
-                    } else {
-                        scene.dialogs.append(headingDialog)
-                    }
-                }
+            // 2. Add scene heading as a separate narrator dialog (just once)
+            if !originalScene.heading.isEmpty {
+                sequencedDialogs.append(Scene.Dialog(character: narratorName, text: originalScene.heading))
+            }
+            
+            // 3. Extract and add scene description (general atmosphere and setting)
+            var sceneDescriptionAdded = false
+            
+            // Regular expression for finding character descriptions
+            let characterPattern = "([A-Z][A-Z\\s]+)\\s*\\(([^\\)]+)\\)\\s+(.+)"
+            let characterRegex = try? NSRegularExpression(pattern: characterPattern)
+            
+            // Extract the main scene description without character descriptions
+            if !originalScene.description.isEmpty {
+                // Split into paragraphs for better reading
+                let paragraphs = originalScene.description.components(separatedBy: "\n\n")
                 
-                // Add scene description as dialog from narrator if not empty
-                if !scene.description.isEmpty {
-                    let descriptionDialog = Scene.Dialog(character: narratorName, text: scene.description)
-                    
-                    // Insert after heading or at beginning if no heading
-                    if scene.dialogs.isEmpty {
-                        scene.dialogs.append(descriptionDialog)
-                    } else if scene.dialogs[0].character == narratorName {
-                        scene.dialogs.insert(descriptionDialog, at: 1)
-                    } else {
-                        scene.dialogs.insert(descriptionDialog, at: 0)
+                for paragraph in paragraphs.prefix(1) {  // Only process the first paragraph as general description
+                    let trimmed = paragraph.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        // Check if paragraph is a character description
+                        if let regex = characterRegex, 
+                           regex.firstMatch(in: trimmed, range: NSRange(location: 0, length: trimmed.count)) != nil {
+                            // This contains character info - skip it here
+                        } else {
+                            // This is general scene description
+                            sequencedDialogs.append(Scene.Dialog(character: narratorName, text: trimmed))
+                            sceneDescriptionAdded = true
+                        }
                     }
                 }
             }
+            
+            // 4. Build a map of character introductions from scene description
+            var characterIntros: [String: String] = [:]  // Character name -> intro text
+            
+            // Extract character descriptions from the scene description
+            let sceneText = originalScene.description
+            let sceneLines = sceneText.components(separatedBy: .newlines)
+            
+            for line in sceneLines {
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let regex = characterRegex,
+                   let match = regex.firstMatch(in: trimmed, range: NSRange(location: 0, length: trimmed.count)) {
+                    
+                    let nsLine = trimmed as NSString
+                    let charName = match.range(at: 1).location != NSNotFound ? 
+                                 nsLine.substring(with: match.range(at: 1)) : ""
+                    
+                    // Store the full line as the intro for this character
+                    characterIntros[charName] = trimmed
+                }
+            }
+            
+            // 5. Track characters who have been introduced
+            var introducedCharacters = Set<String>()
+            
+            // 6. Add dialog content in the correct sequence, introducing characters first
+            for dialog in originalScene.dialogs {
+                // Skip any existing narrator content
+                if dialog.character == narratorName || 
+                   dialog.character.contains("SCENE") ||
+                   dialog.character.contains("HEADING") ||
+                   dialog.character.contains("DESCRIPTION") {
+                    continue
+                }
+                
+                let character = dialog.character
+                let dialogText = dialog.text
+                
+                // Check if we need to introduce this character first
+                if !introducedCharacters.contains(character) {
+                    // Add the character introduction if we have one
+                    if let introText = characterIntros[character] {
+                        sequencedDialogs.append(Scene.Dialog(character: narratorName, text: introText))
+                    }
+                    introducedCharacters.insert(character)
+                }
+                
+                // Now add the character's dialog
+                // Check if the dialog contains another character's introduction
+                if let regex = characterRegex,
+                   let match = regex.firstMatch(in: dialogText, range: NSRange(location: 0, length: dialogText.count)) {
+                    
+                    // Extract the dialog part vs. character introduction part
+                    let nsText = dialogText as NSString
+                    
+                    let dialogPart = match.range.location > 0 ?
+                                   nsText.substring(with: NSRange(location: 0, length: match.range.location))
+                                        .trimmingCharacters(in: .whitespacesAndNewlines) : ""
+                    
+                    let charName = match.range(at: 1).location != NSNotFound ? 
+                                 nsText.substring(with: match.range(at: 1)) : ""
+                    
+                    // Add the character's dialog (if any)
+                    if !dialogPart.isEmpty {
+                        sequencedDialogs.append(Scene.Dialog(character: character, text: dialogPart))
+                    }
+                    
+                    // Add the character intro for the next character
+                    if !charName.isEmpty && !introducedCharacters.contains(charName) {
+                        let introText = nsText.substring(with: match.range)
+                        sequencedDialogs.append(Scene.Dialog(character: narratorName, text: introText))
+                        introducedCharacters.insert(charName)
+                    }
+                } else {
+                    // Regular dialog - add it as is
+                    sequencedDialogs.append(dialog)
+                }
+            }
+            
+            // Set our processed dialogs to the new scene
+            newScene.dialogs = sequencedDialogs
+            
+            // Add to our result list
+            processedScenes.append(newScene)
         }
+        
+        // Update scenes with our processed version
+        scenes = processedScenes
+    }
+    
+    // Find title and credits at the beginning of the screenplay
+    private func findTitleAndCredits() -> String {
+        // Check first scene for title information
+        if scenes.isEmpty { return "" }
+        
+        let firstScene = scenes[0]
+        
+        // Look for title in description or heading
+        var titleText = ""
+        
+        // Check if first scene has "FADE IN:" or title-like content
+        if firstScene.heading.contains("FADE IN") || 
+           firstScene.heading.uppercased() == firstScene.heading {
+            titleText += firstScene.heading + "\n\n"
+        }
+        
+        // Look for typical screenplay header content in the description
+        let description = firstScene.description
+        if description.contains("WRITTEN BY") || 
+           description.contains("by") || 
+           description.contains("SCREENPLAY") {
+            
+            // Extract just the first part of the description that might contain title info
+            let lines = description.components(separatedBy: .newlines)
+            var titleLines: [String] = []
+            
+            // Take lines until we hit something that looks like scene content
+            for line in lines {
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.isEmpty { continue }
+                
+                // Stop when we hit typical scene content
+                if trimmed.contains("INT.") || trimmed.contains("EXT.") || 
+                   trimmed.contains("INTERIOR") || trimmed.contains("EXTERIOR") {
+                    break
+                }
+                
+                titleLines.append(trimmed)
+            }
+            
+            if !titleLines.isEmpty {
+                titleText += titleLines.joined(separator: "\n")
+            }
+        }
+        
+        return titleText
     }
     
     private func moveToPrevious() {
@@ -415,6 +734,7 @@ struct ReadAlongView: View {
             }
         }
         
+        // Always read the dialog after moving to a new one
         readCurrentDialog()
     }
 }
