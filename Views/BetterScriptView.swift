@@ -134,8 +134,15 @@ struct ScriptParserView: View {
         // Get the voice for this character
         guard let voice = CharacterVoices.shared.getVoiceFor(character: character) else { return }
         
+        // Clean text by removing stage directions (text in parentheses)
+        let cleanTextToSpeak = textToSpeak.replacingOccurrences(
+            of: "\\(.*?\\)",
+            with: "",
+            options: .regularExpression
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        
         // Create and configure the utterance
-        let utterance = AVSpeechUtterance(string: textToSpeak)
+        let utterance = AVSpeechUtterance(string: cleanTextToSpeak)
         utterance.voice = voice
         utterance.rate = 0.5
         utterance.pitchMultiplier = 1.0
