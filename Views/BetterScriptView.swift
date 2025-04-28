@@ -1,11 +1,15 @@
 import SwiftUI
 import PDFKit
+import AVFoundation
 
 struct ScriptParserView: View {
     @State private var screenplayText: String = ""
     @State private var parsedSections: [ScriptSection] = []
     @State private var currentSectionIndex = 0
     @State private var isLoading: Bool = true
+    @State private var showingVoiceSelection = false
+    @State private var selectedVoiceId: String? = nil
+    @State private var currentCharacter: String = ""
     
     var body: some View {
         VStack {
@@ -21,12 +25,33 @@ struct ScriptParserView: View {
                     }
             } else if !parsedSections.isEmpty {
                 // Display the current section
-                ScriptSectionView(section: parsedSections[currentSectionIndex])
-                    .padding()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(UIColor.systemBackground))
-                    .cornerRadius(10)
-                    .padding()
+                ScriptSectionView(
+                    section: parsedSections[currentSectionIndex], 
+                    onChangeVoice: {
+                        // Update current character for the voice selection modal
+                        if parsedSections[currentSectionIndex].type == .narrator {
+                            currentCharacter = CharacterVoices.NARRATOR_KEY
+                        } else {
+                            let lines = parsedSections[currentSectionIndex].text.components(separatedBy: .newlines)
+                            if let firstLine = lines.first {
+                                currentCharacter = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
+                            }
+                        }
+                        
+                        // Get the current voice ID
+                        if let voice = CharacterVoices.shared.getVoiceFor(character: currentCharacter) {
+                            selectedVoiceId = voice.identifier
+                        }
+                        
+                        // Show voice selection modal
+                        showingVoiceSelection = true
+                    }
+                )
+                .padding()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(UIColor.systemBackground))
+                .cornerRadius(10)
+                .padding()
                 
                 // Navigation buttons
                 HStack {
@@ -63,6 +88,61 @@ struct ScriptParserView: View {
                 .padding()
             }
         }
+        .sheet(isPresented: $showingVoiceSelection) {
+            VoiceSelectionView(character: currentCharacter, selectedVoiceId: $selectedVoiceId)
+                .onDisappear {
+                    // Update voice mapping when selection modal is dismissed
+                    if let voiceId = selectedVoiceId,
+                       let selectedVoice = AVSpeechSynthesisVoice.speechVoices().first(where: { $0.identifier == voiceId }) {
+                        CharacterVoices.shared.setVoice(character: currentCharacter, voice: selectedVoice)
+                        
+                        // Speak the current section with the new voice
+                        speakCurrentSection()
+                    }
+                }
+        }
+        .onChange(of: currentSectionIndex) { _ in
+            // Speak the text when navigating between sections
+            speakCurrentSection()
+        }
+    }
+    
+    private func speakCurrentSection() {
+        // Stop any currently playing speech
+        AVSpeechSynthesizer.shared.stopSpeaking(at: .immediate)
+        
+        // Get the current section and determine character
+        guard currentSectionIndex < parsedSections.count else { return }
+        
+        let section = parsedSections[currentSectionIndex]
+        let character: String
+        let textToSpeak: String
+        
+        if section.type == .narrator {
+            character = CharacterVoices.NARRATOR_KEY
+            textToSpeak = section.text
+        } else {
+            // For character dialog, extract name and dialog
+            let lines = section.text.components(separatedBy: .newlines)
+            if lines.count < 2 { return }
+            
+            character = lines[0].trimmingCharacters(in: .whitespacesAndNewlines)
+            // Skip the character name line and join the rest
+            textToSpeak = lines.dropFirst().joined(separator: " ")
+        }
+        
+        // Get the voice for this character
+        guard let voice = CharacterVoices.shared.getVoiceFor(character: character) else { return }
+        
+        // Create and configure the utterance
+        let utterance = AVSpeechUtterance(string: textToSpeak)
+        utterance.voice = voice
+        utterance.rate = 0.5
+        utterance.pitchMultiplier = 1.0
+        utterance.volume = 1.0
+        
+        // Speak the text
+        AVSpeechSynthesizer.shared.speak(utterance)
     }
     
     private func loadPDFContent() {
@@ -127,6 +207,9 @@ struct ScriptParserView: View {
                 print("DEBUG: Section \(index + 1) - Preview: \(section.text.prefix(50))")
             }
             
+            // Assign random voices for narrator and characters
+            assignInitialVoices()
+            
             isLoading = false
         } else {
             print("DEBUG: Failed to load PDF document")
@@ -134,6 +217,37 @@ struct ScriptParserView: View {
             screenplayText = "Failed to load PDF content"
             parsedSections = parseScreenplay(screenplayText)
             isLoading = false
+        }
+    }
+    
+    private func assignInitialVoices() {
+        // Ensure narrator has a voice
+        if CharacterVoices.shared.getVoiceFor(character: CharacterVoices.NARRATOR_KEY) == nil {
+            if let randomVoice = CharacterVoices.shared.getRandomVoice() {
+                CharacterVoices.shared.setVoice(character: CharacterVoices.NARRATOR_KEY, voice: randomVoice)
+            }
+        }
+        
+        // Create a set to keep track of characters we've already processed
+        var processedCharacters = Set<String>()
+        
+        // Go through all sections and assign voices for character dialogs
+        for section in parsedSections {
+            if section.type == .character {
+                // Extract character name from first line
+                let lines = section.text.components(separatedBy: .newlines)
+                if let firstLine = lines.first {
+                    let character = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
+                    
+                    // If this character doesn't have a voice yet, assign one
+                    if !processedCharacters.contains(character) {
+                        if let randomVoice = CharacterVoices.shared.getRandomVoice() {
+                            CharacterVoices.shared.setVoice(character: character, voice: randomVoice)
+                            processedCharacters.insert(character)
+                        }
+                    }
+                }
+            }
         }
     }
     
@@ -434,10 +548,30 @@ enum SectionType {
 
 struct ScriptSectionView: View {
     let section: ScriptSection
+    let onChangeVoice: () -> Void
+    
+    // Extract the character name for character sections
+    private var characterName: String {
+        if section.type == .narrator {
+            return CharacterVoices.NARRATOR_KEY
+        } else {
+            // For character sections, extract name from first line
+            let lines = section.text.components(separatedBy: .newlines)
+            if let firstLine = lines.first {
+                return firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        return "UNKNOWN"
+    }
+    
+    // Get the current voice for this character
+    private var currentVoice: String {
+        return CharacterVoices.shared.getVoiceNameFor(character: characterName)
+    }
     
     var body: some View {
         VStack {
-            Text(section.type == .narrator ? "NARRATOR" : "CHARACTER")
+            Text(section.type == .narrator ? "NARRATOR" : characterName)
                 .font(.headline)
                 .padding(.bottom, 4)
             
@@ -449,5 +583,27 @@ struct ScriptSectionView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(
+            VStack {
+                Spacer()
+                HStack {
+                    Text("Voice: \(currentVoice)")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    Button(action: onChangeVoice) {
+                        Label("Change Voice", systemImage: "person.wave.2")
+                            .font(.footnote)
+                    }
+                }
+                .padding()
+                .background(Color(UIColor.systemBackground).opacity(0.9))
+                .cornerRadius(10)
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+            }
+        )
     }
 }
