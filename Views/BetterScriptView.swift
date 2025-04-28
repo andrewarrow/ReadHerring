@@ -298,11 +298,42 @@ trying to appear calm) paces while checking her phone.
                 
                 // Collect dialog content
                 var dialogLineCount = 0
-                while i < lines.count && !isCharacterLine(lines[i]) && !lines[i].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                while i < lines.count {
+                    let nextLine = lines[i]
+                    let trimmedNextLine = nextLine.trimmingCharacters(in: .whitespacesAndNewlines)
+                    
+                    // Stop if line is empty
+                    if trimmedNextLine.isEmpty {
+                        i += 1
+                        break
+                    }
+                    
+                    // Stop if next line is another character name
+                    if isCharacterLine(nextLine) {
+                        break
+                    }
+                    
+                    // Stop if next line contains a character name in all caps followed by description
+                    // Like: "MIKE (20s, software engineer, disheveled) rushes in"
+                    let containsCharacterDescription = 
+                        trimmedNextLine.range(of: "[A-Z]{2,}\\s*\\([^\\)]+\\)", options: .regularExpression) != nil &&
+                        trimmedNextLine.lowercased() != trimmedNextLine
+                    
+                    // Stop if line looks like a scene heading
+                    let isSceneHeadingLine = 
+                        trimmedNextLine.starts(with: "INT") || 
+                        trimmedNextLine.starts(with: "EXT") || 
+                        trimmedNextLine.starts(with: "FADE")
+                    
+                    if containsCharacterDescription || isSceneHeadingLine {
+                        break
+                    }
+                    
                     // Debug the exact line content with representation of whitespace
-                    let debugLine = lines[i].replacingOccurrences(of: " ", with: "·")
+                    let debugLine = nextLine.replacingOccurrences(of: " ", with: "·")
                     print("DEBUG: Dialog line: '\(debugLine)'")
-                    dialogText += lines[i] + "\n"
+                    
+                    dialogText += nextLine + "\n"
                     dialogLineCount += 1
                     i += 1
                 }
@@ -310,6 +341,11 @@ trying to appear calm) paces while checking her phone.
                 
                 sections.append(ScriptSection(type: .character, text: dialogText))
                 print("DEBUG: Added character section with \(dialogText.count) chars")
+                
+                // Create a new narrator section for any text after the dialog
+                currentSectionType = .narrator
+                currentSectionText = ""
+                
                 continue // Skip the normal increment
             } else {
                 // This is part of the narrator text
