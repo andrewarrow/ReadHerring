@@ -17,12 +17,12 @@ struct ScriptParserView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header with title and document picker button - dark navy blue like TableRead
+            // Header with title and document picker button
             HStack {
-                Text("Script Reader")
+                Text("Read Herring")
                     .font(.system(size: 18, weight: .medium))
                     .padding()
-                    .foregroundColor(.white)
+                    .foregroundColor(Color(UIColor.systemBackground))
                 
                 Spacer()
                 
@@ -31,11 +31,11 @@ struct ScriptParserView: View {
                 }) {
                     Image(systemName: "doc.fill.badge.plus")
                         .font(.title2)
-                        .foregroundColor(.white)
+                        .foregroundColor(Color(UIColor.systemBackground))
                         .padding()
                 }
             }
-            .background(Color(red: 0.1, green: 0.12, blue: 0.25))
+            .background(Color(UIColor.systemIndigo))
             
             if isLoading {
                 // Loading state
@@ -92,9 +92,9 @@ struct ScriptParserView: View {
     private var scriptContentView: some View {
         ScrollView {
             scriptContentList
-                .background(Color.white)
+                .background(Color(UIColor.systemBackground))
         }
-        .background(Color.white)
+        .background(Color(UIColor.systemBackground))
         .onChange(of: currentSectionIndex) { newIndex in
             // Update current scene when section changes
             updateCurrentScene(for: newIndex)
@@ -114,28 +114,38 @@ struct ScriptParserView: View {
     private func sectionView(for index: Int) -> some View {
         let section = parsedSections[index]
         
-        let backgroundColor: Color
-        if section.type == .character && index == currentSectionIndex {
-            backgroundColor = Color.blue.opacity(0.1)
-        } else if index == currentSectionIndex {
-            backgroundColor = Color.yellow.opacity(0.1)
-        } else {
-            backgroundColor = Color.white
-        }
-        
         return VStack(alignment: .leading, spacing: 0) {
             // Add line for each section
             if index > 0 {
                 Divider()
-                    .background(Color.gray.opacity(0.3))
             }
             
             // Section content
             contentView(for: section)
         }
         .padding(.vertical, 2)
-        .background(backgroundColor)
+        .background(backgroundColorFor(section: section, index: index))
         .id(index) // For scrolling to current section
+    }
+    
+    // Determine background color based on section type, index, and color scheme
+    @ViewBuilder
+    private func backgroundColorFor(section: ScriptSection, index: Int) -> some View {
+        if section.type == .character && index == currentSectionIndex {
+            // Highlighted character section - light blue in TableRead
+            Color(red: 0.85, green: 0.9, blue: 1.0)
+        } else if index == currentSectionIndex {
+            // Other highlighted sections - light yellow in TableRead
+            Color(red: 1.0, green: 0.98, blue: 0.85)
+        } else if section.type == .sceneHeading {
+            // Scene headings have a dark background in TableRead
+            Color.black
+        } else {
+            // Regular section background - white for narrative, alternate colors for character
+            section.type == .character ? 
+                Color(UIColor { $0.userInterfaceStyle == .dark ? .systemGray6 : .white }) : 
+                Color(UIColor.systemBackground)
+        }
     }
     
     // Content view for different section types
@@ -160,13 +170,19 @@ struct ScriptParserView: View {
         return VStack(alignment: .center, spacing: 4) {
             Text(character)
                 .font(.custom("Courier", size: 14).bold())
+                .foregroundColor(Color(UIColor.label))
                 .padding(.top, 8)
+                .frame(maxWidth: .infinity, alignment: .center)
             
             Text(dialog)
                 .font(.custom("Courier", size: 13))
+                .foregroundColor(Color(UIColor.label))
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 20)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 40) // Wider horizontal padding for proper centering
                 .padding(.bottom, 8)
+                .frame(maxWidth: .infinity, alignment: .center)
         }
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
@@ -181,7 +197,11 @@ struct ScriptParserView: View {
     private func sceneHeadingView(section: ScriptSection) -> some View {
         return Text(section.text)
             .font(.custom("Courier", size: 13).bold())
+            .foregroundColor(.white) // White text on black background like TableRead
             .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .onTapGesture {
@@ -194,7 +214,11 @@ struct ScriptParserView: View {
     private func narratorSectionView(section: ScriptSection) -> some View {
         return Text(section.text)
             .font(.custom("Courier", size: 13))
+            .foregroundColor(Color(UIColor.label))
             .padding(.vertical, 4)
+            .padding(.horizontal, 8)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .onTapGesture {
@@ -259,12 +283,12 @@ struct ScriptParserView: View {
                 // Section/total counter
                 Text("\(currentSectionIndex + 1) / \(parsedSections.count)")
                     .font(.footnote)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Color(UIColor.secondaryLabel))
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
-            .background(Color(red: 0.1, green: 0.12, blue: 0.25))
-            .foregroundColor(.white)
+            .background(Color(UIColor.systemIndigo).opacity(0.9))
+            .foregroundColor(Color(UIColor.systemBackground))
             
             // Additional tabs for import, audio, characters, etc.
             HStack(spacing: 0) {
@@ -275,8 +299,8 @@ struct ScriptParserView: View {
                 tabButton(label: "Scenes", systemImage: "list.bullet")
                 tabButton(label: "Settings", systemImage: "gear")
             }
-            .background(Color(red: 1.0, green: 0.6, blue: 0.0)) // Orange similar to TableRead
-            .foregroundColor(.white)
+            .background(Color.orange)
+            .foregroundColor(Color(UIColor.systemBackground))
         }
     }
     
