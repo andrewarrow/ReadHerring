@@ -165,7 +165,10 @@ struct ScriptParserView: View {
     private func characterSectionView(section: ScriptSection) -> some View {
         let lines = section.text.components(separatedBy: .newlines)
         let character = lines.first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let dialog = lines.count > 1 ? lines.dropFirst().joined(separator: "\n") : ""
+        
+        // Process dialog: join text but preserve paragraph breaks (double newlines)
+        let dialogLines = lines.count > 1 ? Array(lines.dropFirst()) : []
+        let processedDialog = processTextForWrapping(dialogLines)
         
         return VStack(alignment: .center, spacing: 4) {
             Text(character)
@@ -174,7 +177,7 @@ struct ScriptParserView: View {
                 .padding(.top, 8)
                 .frame(maxWidth: .infinity, alignment: .center)
             
-            Text(dialog)
+            Text(processedDialog)
                 .font(.custom("Courier", size: 13))
                 .foregroundColor(Color(UIColor.label))
                 .multilineTextAlignment(.center)
@@ -193,9 +196,39 @@ struct ScriptParserView: View {
         }
     }
     
+    // Helper to process text for proper wrapping
+    private func processTextForWrapping(_ lines: [String]) -> String {
+        var result = ""
+        var previousLineEmpty = false
+        
+        for line in lines {
+            let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            if trimmedLine.isEmpty {
+                // Only add one newline for empty lines and avoid consecutive empty lines
+                if !previousLineEmpty && !result.isEmpty {
+                    result += "\n"
+                }
+                previousLineEmpty = true
+            } else {
+                // If it's not the first line and the previous line wasn't empty, 
+                // add a space instead of a newline
+                if !result.isEmpty && !previousLineEmpty {
+                    result += " "
+                }
+                result += trimmedLine
+                previousLineEmpty = false
+            }
+        }
+        
+        return result
+    }
+    
     // Scene heading formatting
     private func sceneHeadingView(section: ScriptSection) -> some View {
-        return Text(section.text)
+        let processedText = processTextForWrapping(section.text.components(separatedBy: .newlines))
+        
+        return Text(processedText)
             .font(.custom("Courier", size: 13).bold())
             .foregroundColor(.white) // White text on black background like TableRead
             .padding(.vertical, 8)
@@ -212,7 +245,9 @@ struct ScriptParserView: View {
     
     // Narrator/action text formatting
     private func narratorSectionView(section: ScriptSection) -> some View {
-        return Text(section.text)
+        let processedText = processTextForWrapping(section.text.components(separatedBy: .newlines))
+        
+        return Text(processedText)
             .font(.custom("Courier", size: 13))
             .foregroundColor(Color(UIColor.label))
             .padding(.vertical, 4)
