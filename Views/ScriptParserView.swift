@@ -131,20 +131,39 @@ struct ScriptParserView: View {
     // Determine background color based on section type, index, and color scheme
     @ViewBuilder
     private func backgroundColorFor(section: ScriptSection, index: Int) -> some View {
-        if section.type == .character && index == currentSectionIndex {
-            // Highlighted character section - light blue in TableRead
-            Color(red: 0.85, green: 0.9, blue: 1.0)
-        } else if index == currentSectionIndex {
-            // Other highlighted sections - light yellow in TableRead
-            Color(red: 1.0, green: 0.98, blue: 0.85)
-        } else if section.type == .sceneHeading {
-            // Scene headings have a dark background in TableRead
-            Color.black
-        } else {
-            // Regular section background - white for narrative, alternate colors for character
-            section.type == .character ? 
-                Color(UIColor { $0.userInterfaceStyle == .dark ? .systemGray6 : .white }) : 
+        Group {
+            if section.type == .character && index == currentSectionIndex {
+                // Highlighted character section - adapts to color scheme
+                Color(UIColor { traits in
+                    return traits.userInterfaceStyle == .dark ? 
+                        UIColor(red: 0.2, green: 0.3, blue: 0.4, alpha: 1.0) : 
+                        UIColor(red: 0.85, green: 0.9, blue: 1.0, alpha: 1.0)
+                })
+            } else if index == currentSectionIndex {
+                // Other highlighted sections - adapts to color scheme
+                Color(UIColor { traits in
+                    return traits.userInterfaceStyle == .dark ? 
+                        UIColor(red: 0.35, green: 0.35, blue: 0.2, alpha: 1.0) : 
+                        UIColor(red: 1.0, green: 0.98, blue: 0.85, alpha: 1.0)
+                })
+            } else if section.type == .sceneHeading {
+                // Scene headings - dark in light mode, darker in dark mode
+                Color(UIColor { traits in
+                    return traits.userInterfaceStyle == .dark ? 
+                        UIColor.black : 
+                        UIColor.darkGray
+                })
+            } else if section.type == .character {
+                // Character sections get alternating background
+                Color(UIColor { traits in
+                    return traits.userInterfaceStyle == .dark ? 
+                        UIColor.systemGray6 : 
+                        UIColor.white
+                })
+            } else {
+                // Regular narrative background
                 Color(UIColor.systemBackground)
+            }
         }
     }
     
@@ -230,7 +249,7 @@ struct ScriptParserView: View {
         
         return Text(processedText)
             .font(.custom("Courier", size: 13).bold())
-            .foregroundColor(.white) // White text on black background like TableRead
+            .foregroundColor(Color.white) // White text always for scene headings regardless of mode
             .padding(.vertical, 8)
             .padding(.horizontal, 12)
             .lineLimit(nil)
