@@ -1,0 +1,12 @@
+screenplay pdf files come in all sorts of format. But the basic elements are always the same.
+There is a title page, then FADE IN: and then it alternates between NARRATOR lines and CHARACTER
+lines. ultrathink a plan to take in a pdf, extract the text, and then correctly parse it.
+
+The presents of \n and \t or spaces will be the way to know what things are.
+
+CHARACTER dialog always starts with tabs or spaces to indent the name in the center of the page.
+
+Make sure your plan does not rely on looking for common english words to know when a change between
+CHARACTER and NARRATOR happens. It must use only the new lines, tabs, spaces. And it must work for
+any screenplay not just one example. There are 3 examples here for you to test with: pointbreak.pdf,
+fade.pdf, and anora.pdf
