@@ -735,6 +735,7 @@ struct ScriptParserView: View {
                 // Look ahead for dialog lines
                 var j = i + 1
                 var consecutiveEmptyLines = 0
+                var dialogLineCount = 0
                 
                 // Process dialog until we hit another character, scene heading, or narrative description
                 while j < lines.count && !isSceneHeading(lines[j]) && !isCharacterLine(lines[j]) {
@@ -748,13 +749,20 @@ struct ScriptParserView: View {
                         consecutiveEmptyLines = 0
                     }
                     
-                    // Add dialog line if it's not empty
+                    // Check for action words that indicate narrative, not dialog
+                    let isActionLine = isLikelyNarrative(nextTrimmed) || 
+                                       isSentenceWithAction(nextTrimmed)
+                    
+                    // Add dialog line if it's not empty and not an action line
                     if !nextTrimmed.isEmpty {
-                        // Check if this might be a narrative line (all caps description)
-                        if isLikelyNarrative(nextTrimmed) {
-                            break // Stop at narrative description
+                        if isActionLine || dialogLineCount >= 3 {
+                            // Stop at narrative description or after 3 dialog lines
+                            // (most character dialog in screenplays is 1-3 lines)
+                            break
                         }
+                        
                         currentSection += "\n" + nextLine
+                        dialogLineCount += 1
                     } else if !currentSection.hasSuffix("\n\n") {
                         // Add at most one blank line to preserve formatting
                         currentSection += "\n"
@@ -884,11 +892,16 @@ struct ScriptParserView: View {
             "FLASHBACK", "END FLASHBACK", "DREAM SEQUENCE", "END DREAM",
             "CONTINUOUS", "SAME", "LATER", "MOMENTS LATER", "THAT NIGHT",
             "VERY FAST", "POV", "ANGLE ON", "CLOSE UP", "WIDE SHOT",
-            "INT", "EXT", "INTERIOR", "EXTERIOR", "I/E", "INT/EXT"
+            "INT", "EXT", "INTERIOR", "EXTERIOR", "I/E", "INT/EXT",
+            "PEOPLE", "EVERYBODY", "EVERYONE", "MEN", "WOMEN"
         ]
         
         // Check if line contains any non-character phrases
-        let containsNonCharacterPhrase = nonCharacterPhrases.contains { trimmedLine.contains($0) }
+        let containsNonCharacterPhrase = nonCharacterPhrases.contains { word in
+            // Only match whole words, not substrings
+            let pattern = "\\b\(word)\\b"
+            return trimmedLine.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
+        }
         
         // Check for sound effects (often in all caps)
         let isSoundEffect = trimmedLine.contains("!") || 
@@ -897,11 +910,16 @@ struct ScriptParserView: View {
                            trimmedLine.contains("CRASH") ||
                            trimmedLine.contains("BANG")
         
+        // Check for common verbs that indicate action, not character names
+        let containsActionVerb = trimmedLine.range(of: "\\b(DROP|MOVE|LOOK|ENTER|EXIT|RUN|JUMP|SHOOT|FIRE|OPEN|CLOSE|WALK|TAKE|GIVE|SHOW)\\b", 
+                                                 options: [.regularExpression]) != nil
+        
         // Decide if this is a character name
         let isCharacterName = isAllCaps && 
                              hasReasonableLength && 
                              !containsNonCharacterPhrase && 
                              !isSoundEffect &&
+                             !containsActionVerb &&
                              (!trimmedLine.contains(".") || hasParenthetical) &&
                              !trimmedLine.hasSuffix(":") &&
                              !trimmedLine.hasSuffix("--")
@@ -940,7 +958,47 @@ struct ScriptParserView: View {
         // Check if the whole line is in ALL CAPS (often used for emphasis or character intro)
         let isAllCaps = trimmedLine == trimmedLine.uppercased() && trimmedLine.count > 10
         
+        // Check for plural words that are typically used in narrative descriptions, not dialog
+        let pluralWordsPattern = "\\b(PEOPLE|EVERYBODY|CROWD|MEN|WOMEN|CHILDREN|CUSTOMERS|EMPLOYEES)\\b"
+        if trimmedLine.range(of: pluralWordsPattern, options: .regularExpression) != nil {
+            return true
+        }
+        
         return isAllCaps
+    }
+    
+    // Helper to detect sentences that describe actions, not dialog
+    private func isSentenceWithAction(_ line: String) -> Bool {
+        let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Skip empty lines
+        if trimmedLine.isEmpty {
+            return false
+        }
+        
+        // Common action verbs in screenplay narrative
+        let actionVerbPattern = "\\b(drop|move|run|walk|enter|exit|open|close|slam|hit|grab|take|" +
+                               "pull|push|fire|shoot|jump|fall|rise|burst|crash|explode|fade|cut|" +
+                               "dissolve|pan|track|zoom|watches|nods|shakes|turns|stands|sits|crouches)\\b"
+        
+        // Check if the sentence contains action verbs
+        if trimmedLine.range(of: actionVerbPattern, options: [.regularExpression, .caseInsensitive]) != nil {
+            return true
+        }
+        
+        // Look for subject + verb structures that indicate narrative
+        let subjectVerbPattern = "\\b(he|she|they|the|a|an|some|people|men|women)\\s+(\\w+s|is|are|has|have|had|was|were)\\b"
+        if trimmedLine.range(of: subjectVerbPattern, options: [.regularExpression, .caseInsensitive]) != nil {
+            return true
+        }
+        
+        // Directions and transitions are narrative
+        let directionPattern = "\\b(ANGLE ON|CUT TO|PAN TO|CLOSE UP|WIDE SHOT|FADE|DISSOLVE)\\b"
+        if trimmedLine.range(of: directionPattern, options: [.regularExpression]) != nil {
+            return true
+        }
+        
+        return false
     }
 }
 
