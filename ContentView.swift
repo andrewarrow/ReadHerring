@@ -7,6 +7,9 @@ import Combine
 import AVFoundation
 import Foundation
 
+// Import view that was moved to separate file
+import SwiftUI
+
 // Model for Cast
 // struct CastImage moved to Models/CastImage.swift
 
@@ -30,7 +33,7 @@ struct ContentView: View {
     @State private var progress: Float = 0.0
     @State private var screenplaySummary: ScreenplaySummary?
     // FORCE SHOW READ ALONG VIEW FOR TESTING
-    @State private var activeView: String = "onboarding" // "onboarding", "voices", "cast", "main", or "test_read_along"
+    @State private var activeView: String = "test_read_along" // "onboarding", "voices", "cast", "main", or "test_read_along"
     // Properties and methods moved to CastImage.swift
     // Properties moved to CastFilter.swift
     
@@ -42,7 +45,7 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             if activeView == "test_read_along" {
-               
+                ScriptParserView()
             } else if activeView == "onboarding" {
                 OnboardingView(showOnboarding: Binding(
                     get: { true },
