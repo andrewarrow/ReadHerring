@@ -17,11 +17,12 @@ struct ScriptParserView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header with title and document picker button
+            // Header with title and document picker button - dark navy blue like TableRead
             HStack {
                 Text("Script Reader")
-                    .font(.title)
+                    .font(.system(size: 18, weight: .medium))
                     .padding()
+                    .foregroundColor(.white)
                 
                 Spacer()
                 
@@ -30,10 +31,11 @@ struct ScriptParserView: View {
                 }) {
                     Image(systemName: "doc.fill.badge.plus")
                         .font(.title2)
+                        .foregroundColor(.white)
                         .padding()
                 }
             }
-            .background(Color.gray.opacity(0.1))
+            .background(Color(red: 0.1, green: 0.12, blue: 0.25))
             
             if isLoading {
                 // Loading state
@@ -89,37 +91,63 @@ struct ScriptParserView: View {
     // Script content area that displays the screenplay text
     private var scriptContentView: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(0..<parsedSections.count, id: \.self) { index in
-                    let section = parsedSections[index]
-                    
-                    // Section view with highlighting for current section
-                    VStack(alignment: .leading, spacing: 0) {
-                        // Add line for each section
-                        if index > 0 {
-                            Divider()
-                                .background(Color.gray.opacity(0.5))
-                        }
-                        
-                        // Section content
-                        if section.type == .character {
-                            characterSectionView(section: section)
-                        } else if section.type == .sceneHeading {
-                            sceneHeadingView(section: section)
-                        } else {
-                            narratorSectionView(section: section)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                    .background(index == currentSectionIndex ? Color.yellow.opacity(0.2) : Color.clear)
-                    .id(index) // For scrolling to current section
-                }
-            }
-            .padding(.horizontal)
+            scriptContentList
+                .background(Color.white)
         }
+        .background(Color.white)
         .onChange(of: currentSectionIndex) { newIndex in
             // Update current scene when section changes
             updateCurrentScene(for: newIndex)
+        }
+    }
+    
+    // Extracted content list to help compiler type-check
+    private var scriptContentList: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(0..<parsedSections.count, id: \.self) { index in
+                sectionView(for: index)
+            }
+        }
+    }
+    
+    // Individual section view
+    private func sectionView(for index: Int) -> some View {
+        let section = parsedSections[index]
+        
+        let backgroundColor: Color
+        if section.type == .character && index == currentSectionIndex {
+            backgroundColor = Color.blue.opacity(0.1)
+        } else if index == currentSectionIndex {
+            backgroundColor = Color.yellow.opacity(0.1)
+        } else {
+            backgroundColor = Color.white
+        }
+        
+        return VStack(alignment: .leading, spacing: 0) {
+            // Add line for each section
+            if index > 0 {
+                Divider()
+                    .background(Color.gray.opacity(0.3))
+            }
+            
+            // Section content
+            contentView(for: section)
+        }
+        .padding(.vertical, 2)
+        .background(backgroundColor)
+        .id(index) // For scrolling to current section
+    }
+    
+    // Content view for different section types
+    private func contentView(for section: ScriptSection) -> some View {
+        Group {
+            if section.type == .character {
+                characterSectionView(section: section)
+            } else if section.type == .sceneHeading {
+                sceneHeadingView(section: section)
+            } else {
+                narratorSectionView(section: section)
+            }
         }
     }
     
@@ -131,11 +159,11 @@ struct ScriptParserView: View {
         
         return VStack(alignment: .center, spacing: 4) {
             Text(character)
-                .font(.headline)
+                .font(.custom("Courier", size: 14).bold())
                 .padding(.top, 8)
             
             Text(dialog)
-                .font(.body)
+                .font(.custom("Courier", size: 13))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
                 .padding(.bottom, 8)
@@ -152,8 +180,8 @@ struct ScriptParserView: View {
     // Scene heading formatting
     private func sceneHeadingView(section: ScriptSection) -> some View {
         return Text(section.text)
-            .font(.headline)
-            .padding(.vertical, 12)
+            .font(.custom("Courier", size: 13).bold())
+            .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .onTapGesture {
@@ -165,7 +193,7 @@ struct ScriptParserView: View {
     // Narrator/action text formatting
     private func narratorSectionView(section: ScriptSection) -> some View {
         return Text(section.text)
-            .font(.body)
+            .font(.custom("Courier", size: 13))
             .padding(.vertical, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
@@ -235,7 +263,8 @@ struct ScriptParserView: View {
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
-            .background(Color.gray.opacity(0.1))
+            .background(Color(red: 0.1, green: 0.12, blue: 0.25))
+            .foregroundColor(.white)
             
             // Additional tabs for import, audio, characters, etc.
             HStack(spacing: 0) {
@@ -246,7 +275,7 @@ struct ScriptParserView: View {
                 tabButton(label: "Scenes", systemImage: "list.bullet")
                 tabButton(label: "Settings", systemImage: "gear")
             }
-            .background(Color.orange)
+            .background(Color(red: 1.0, green: 0.6, blue: 0.0)) // Orange similar to TableRead
             .foregroundColor(.white)
         }
     }
