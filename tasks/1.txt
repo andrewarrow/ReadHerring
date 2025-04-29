@@ -1,12 +1,65 @@
-screenplay pdf files come in all sorts of format. But the basic elements are always the same.
-There is a title page, then FADE IN: and then it alternates between NARRATOR lines and CHARACTER
-lines. ultrathink a plan to take in a pdf, extract the text, and then correctly parse it.
+Screenplay PDF Parsing Guidelines
+==============================
 
-The presents of \n and \t or spaces will be the way to know what things are.
+Screenplay PDF files come in various formats, but the basic structural elements remain consistent:
+- Title page
+- "FADE IN:" marker
+- Alternating NARRATOR sections and CHARACTER dialog sections
 
-CHARACTER dialog always starts with tabs or spaces to indent the name in the center of the page.
+Key Challenge: Extract text from PDFs and correctly parse it without relying on content analysis.
 
-Make sure your plan does not rely on looking for common english words to know when a change between
-CHARACTER and NARRATOR happens. It must use only the new lines, tabs, spaces. And it must work for
-any screenplay not just one example. There are 3 examples here for you to test with: pointbreak.pdf,
-fade.pdf, and anora.pdf
+Parsing Rules
+------------
+1. Use ONLY structural patterns (newlines, indentation with spaces/tabs) to determine section types.
+2. NEVER rely on analyzing English words or content to identify section types.
+3. Must work for ANY screenplay, not just specific examples.
+
+Character Dialog Identification
+-----------------------------
+1. Character names are ALWAYS in ALL CAPS.
+2. Character names typically have significant indentation (centered on page).
+3. Character names are typically short (less than 40 characters).
+4. Dialog follows immediately after the character name.
+
+Common Parsing Pitfalls
+----------------------
+1. Misidentifying ALL CAPS scene directions as character names.
+2. Not properly handling indentation variations across different screenplays.
+3. Incorrectly including dialog from one character with another when spacing is inconsistent.
+4. Treating parenthetical elements "(aside)" within dialog as new characters.
+5. Failing to recognize scene headings that don't match expected patterns.
+6. Not properly handling continued dialog after empty lines.
+7. Confusing ALL CAPS words in the middle of narrative sections as character names.
+8. Joining multiple characters' dialog into one section when their names appear consecutively.
+
+Advanced Challenges
+-----------------
+1. Some character names include descriptions in parentheses: "SARAH (30s, CEO)"
+2. Dialog might contain multiple paragraphs separated by empty lines.
+3. Parenthetical stage directions can appear mid-dialog.
+4. PDFs may have different indentation styles across different files.
+5. Some screenplay formats indent dialog differently for primary vs. secondary characters.
+6. Text extraction from PDFs can introduce inconsistent spacing.
+
+Implementation Approach
+---------------------
+1. First identify and handle scene headings (INT./EXT.).
+2. Identify character names based on ALL CAPS and indentation.
+3. Group subsequent lines as dialog until another character name or scene heading is found.
+4. Implement fallback parsing for PDFs with unusual formatting.
+5. Be robust to variations in indentation and spacing.
+
+Testing
+------
+Test with multiple examples to ensure consistency:
+- pointbreak.pdf
+- fade.pdf
+- anora.pdf
+
+Final Output
+-----------
+Properly parsed screenplay should have:
+1. Scene headings clearly identified
+2. Each character's dialog separate from others
+3. Narrator/action text properly separated from dialog
+4. Preserved paragraph breaks within sections
