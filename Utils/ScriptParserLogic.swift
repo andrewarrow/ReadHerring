@@ -151,8 +151,13 @@ public class ScriptParserLogic {
                         continue
                     }
                     
-                    // Stop if we hit another character name or scene heading
-                    if isCharacterName(nextLine) || isAllCapsNameAtStartOfLine(nextLine) || isSceneHeading(nextLine) {
+                    // Stop if we hit another character cue, a scene heading, or an
+                    // action line that starts with an ALL-CAPS name followed by
+                    // lowercase narrative (e.g. "MIKE (20s, engineer) rushes in …").
+                    if isCharacterName(nextLine) ||
+                       isAllCapsNameAtStartOfLine(nextLine) ||
+                       isSceneHeading(nextLine) ||
+                       startsWithCapsNameAndNarrative(nextLine) {
                         break
                     }
                     
@@ -213,107 +218,74 @@ public class ScriptParserLogic {
     /// - Parameter lines: Array of text lines to process
     /// - Returns: Processed text with proper wrapping
     public static func processTextForWrapping(_ lines: [String]) -> String {
-        var result = ""
-        var previousLineEmpty = false
-        var inParenthetical = false
-        
-        for line in lines {
-            let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            
-            if trimmedLine.isEmpty {
-                // Only add one newline for empty lines and avoid consecutive empty lines
-                if !previousLineEmpty && !result.isEmpty {
-                    result += "\n"
+        // Join lines until we hit a blank line – that indicates a new paragraph.
+        // Preserve blank‐line paragraph breaks so that the UI can render them with
+        // an extra line feed.  We purposely avoid any language analysis here
+        // (see tasks/1.txt) and rely purely on structural cues (blank lines).
+
+        var wrappedParagraphs: [String] = []
+        var currentParagraph = ""
+
+        for rawLine in lines {
+            let trimmed = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // Blank line → paragraph break
+            if trimmed.isEmpty {
+                if !currentParagraph.isEmpty {
+                    wrappedParagraphs.append(currentParagraph)
+                    currentParagraph = ""
                 }
-                previousLineEmpty = true
+                continue
+            }
+
+            if currentParagraph.isEmpty {
+                currentParagraph = trimmed
             } else {
-                // Check for parenthetical expressions (stage directions)
-                let startsWithParen = trimmedLine.hasPrefix("(")
-                let endsWithParen = trimmedLine.hasSuffix(")")
-                
-                // Handle start of parenthetical
-                if startsWithParen {
-                    inParenthetical = true
-                }
-                
-                // Logic for joining lines
-                if !result.isEmpty && !previousLineEmpty {
-                    if inParenthetical || startsWithParen {
-                        // Keep parentheticals on their own line
-                        result += "\n"
-                    } else {
-                        // Normal text flow - add space instead of newline
-                        result += " "
-                    }
-                }
-                
-                // Add the content
-                result += trimmedLine
-                
-                // Handle end of parenthetical
-                if endsWithParen && inParenthetical {
-                    inParenthetical = false
-                }
-                
-                previousLineEmpty = false
+                currentParagraph += " " + trimmed
             }
         }
-        
-        return result
+
+        if !currentParagraph.isEmpty {
+            wrappedParagraphs.append(currentParagraph)
+        }
+
+        // Use a double newline to separate paragraphs so SwiftUI Text preserves
+        // the break after we later call .fixedSize().
+        return wrappedParagraphs.joined(separator: "\n\n")
     }
     
     /// Extract character name from a line of text
     /// - Parameter line: The text line to analyze
     /// - Returns: The extracted character name
     public static func extractCharacterName(_ line: String) -> String {
-        let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Look for the first word or words in ALL CAPS
-        var name = ""
-        let words = trimmedLine.split(separator: " ")
-        
-        for word in words {
-            let str = String(word)
-            if str == str.uppercased() && !str.contains(":") {
-                if !name.isEmpty {
-                    name += " "
-                }
-                name += str
-            } else {
-                break
-            }
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // If the name is followed by a colon we treat everything before the colon
+        // as the character name (e.g. "JOHNNY: Hey there!").
+        if let colonRange = trimmed.range(of: ":") {
+            return String(trimmed[..<colonRange.lowerBound]).trimmingCharacters(in: .whitespaces)
         }
-        
-        return name
+
+        // Remove any parenthetical description – those frequently follow the
+        // name on the same line (e.g. "SARAH (O.S.)").
+        let withoutParenthetical = trimmed.components(separatedBy: "(").first ?? trimmed
+
+        // Return the remaining ALL-CAPS portion as the name.
+        return withoutParenthetical.trimmingCharacters(in: .whitespaces)
     }
     
     /// Extract dialog text from a line that contains a character name
     /// - Parameter line: The text line to analyze
     /// - Returns: The extracted dialog text
     public static func extractDialogFromLine(_ line: String) -> String {
-        let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Find where the name ends and dialog begins
-        let characterName = extractCharacterName(line)
-        
-        if characterName.isEmpty || trimmedLine == characterName {
-            return ""
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let colonRange = trimmed.range(of: ":") else {
+            return "" // No in-line dialogue.
         }
-        
-        // Skip the character name and any colon
-        var dialogStart = trimmedLine.index(trimmedLine.startIndex, offsetBy: characterName.count)
-        
-        // Skip any colon and spaces after the name
-        while dialogStart < trimmedLine.endIndex && 
-              (trimmedLine[dialogStart] == ":" || trimmedLine[dialogStart] == " ") {
-            dialogStart = trimmedLine.index(after: dialogStart)
-        }
-        
-        if dialogStart >= trimmedLine.endIndex {
-            return ""
-        }
-        
-        return String(trimmedLine[dialogStart...])
+
+        let afterColon = trimmed[colonRange.upperBound...]
+        return afterColon.trimmingCharacters(in: .whitespaces)
     }
     
     /// Clean speech text by removing stage directions and making narration more readable
@@ -322,65 +294,56 @@ public class ScriptParserLogic {
     ///   - isNarrator: Whether this is narrator speech
     /// - Returns: Cleaned text ready for speech synthesis
     public static func cleanTextForSpeech(_ text: String, isNarrator: Bool) -> String {
-        // Clean text by removing stage directions (text in parentheses)
-        var cleanText = text.replacingOccurrences(
-            of: "\\(.*?\\)",
-            with: "",
-            options: .regularExpression
-        ).trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Replace INT. with "interior" and EXT. with "exterior" for narration
-        if isNarrator {
-            cleanText = cleanText.replacingOccurrences(of: "INT.", with: "Interior")
-            cleanText = cleanText.replacingOccurrences(of: "EXT.", with: "Exterior")
+        var cleaned = text
+
+        // Collapse newlines into single spaces so the synthesiser flows better.
+        cleaned = cleaned.replacingOccurrences(of: "\n", with: " ")
+
+        // Remove duplicated whitespace.
+        while cleaned.contains("  ") {
+            cleaned = cleaned.replacingOccurrences(of: "  ", with: " ")
         }
-        
-        return cleanText
+
+        // For narrator we strip stage directions (parenthetical/bracketed text).
+        if isNarrator {
+            let patterns = ["\\(.*?\\)", "\\[.*?\\]"]
+            for pattern in patterns {
+                cleaned = cleaned.replacingOccurrences(of: pattern, with: "", options: .regularExpression)
+            }
+        }
+
+        // Trim once more.
+        return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
     }
     
     /// Determine gender from a character name, used for voice assignment
     /// - Parameter name: The character name to analyze
     /// - Returns: Gender code ("M", "F", or "random")
     public static func detectGenderFromName(_ name: String) -> String {
-        // Common male name endings and patterns
-        let malePatterns = [
-            "MR\\.", "MR ", // Mr.
-            "\\bJOHN\\b", "\\bJACK\\b", "\\bJAMES\\b", "\\bDAVID\\b", "\\bMICHAEL\\b", "\\bROBERT\\b", 
-            "\\bWILLIAM\\b", "\\bJOSEPH\\b", "\\bTHOMAS\\b", "\\bCHARLES\\b", "\\bCHRISTOPHER\\b", 
-            "\\bDANIEL\\b", "\\bMATTHEW\\b", "\\bANTHONY\\b", "\\bDONALD\\b", "\\bMARK\\b", "\\bPAUL\\b", 
-            "\\bSTEVEN\\b", "\\bANDREW\\b", "\\bKENNETH\\b", "\\bJOSHUA\\b", "\\bKEVIN\\b", "\\bBRIAN\\b", 
-            "\\bGEORGE\\b", "\\bTIMOTHY\\b", "\\bRON\\b", "\\bJEFF\\b", "\\bGREG\\b",
-            "\\bHE\\b", "\\bHIM\\b", "\\bMAN\\b", "\\bBOY\\b", "\\bGUY\\b", "\\bFATHER\\b", "\\bDAD\\b",
-            "\\bSON\\b", "\\bBROTHER\\b", "\\bUNCLE\\b"
-        ]
-        
-        // Common female name endings and patterns
-        let femalePatterns = [
-            "MS\\.", "MS ", "MRS\\.", "MRS ", "MISS ", // Ms., Mrs., Miss
-            "\\bMARY\\b", "\\bPATRICIA\\b", "\\bJENNIFER\\b", "\\bLINDA\\b", "\\bELIZABETH\\b", 
-            "\\bBARBARA\\b", "\\bSUSAN\\b", "\\bJESSICA\\b", "\\bSARAH\\b", "\\bKAREN\\b", 
-            "\\bLISA\\b", "\\bNANCY\\b", "\\bBETTY\\b", "\\bMARGARET\\b", "\\bSANDRA\\b", "\\bASHLEY\\b", 
-            "\\bKIMBERLY\\b", "\\bEMILY\\b", "\\bDONNA\\b", "\\bMICHELLE\\b", "\\bDOROTHY\\b", "\\bCAROL\\b", 
-            "\\bAMANDA\\b", "\\bMELISSA\\b", "\\bDEBORAH\\b", "\\bSTEPHANIE\\b", "\\bREBECCA\\b", "\\bLAURA\\b",
-            "\\bSHE\\b", "\\bHER\\b", "\\bWOMAN\\b", "\\bGIRL\\b", "\\bLADY\\b", "\\bMOTHER\\b", "\\bMOM\\b",
-            "\\bDAUGHTER\\b", "\\bSISTER\\b", "\\bAUNT\\b"
-        ]
-        
-        // Check for male patterns
-        for pattern in malePatterns {
-            if name.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil {
-                return "M"
-            }
+        // Very lightweight heuristics – we purposefully avoid any heavy
+        // NLP and instead just look for common masculine/feminine cues in the
+        // name itself.  If we cannot decide we return "random" so callers can
+        // pick any voice.
+
+        let upper = name.uppercased()
+
+        // Obvious keywords first.
+        let femaleKeywords = ["MOM", "MOTHER", "WOMAN", "GIRL", "LADY", "SISTER", "QUEEN"]
+        let maleKeywords   = ["DAD", "FATHER", "MAN", "BOY", "GUY", "BROTHER", "KING"]
+
+        if femaleKeywords.contains(where: { upper.contains($0) }) {
+            return "F"
         }
-        
-        // Check for female patterns
-        for pattern in femalePatterns {
-            if name.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil {
-                return "F"
-            }
+        if maleKeywords.contains(where: { upper.contains($0) }) {
+            return "M"
         }
-        
-        // Default to random if no gender pattern detected
+
+        // Simple suffix based guess – far from perfect but better than nothing.
+        let feminineSuffixes = ["A", "E", "I"]
+        if let last = upper.last, feminineSuffixes.contains(String(last)) {
+            return "F"
+        }
+
         return "random"
     }
     
@@ -426,378 +389,148 @@ public class ScriptParserLogic {
     }
     
     // MARK: - Helper functions for screenplay parsing
-    
-    // Helper function to check if a line is a standalone character name
-    private static func isStandaloneCharacter(_ line: String, _ lineIndex: Int, _ allLines: [String]) -> Bool {
-        let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Must be all caps and contain only a single word
-        if trimmedLine != trimmedLine.uppercased() {
-            return false
-        }
-        
-        // Common character name patterns
-        let words = trimmedLine.split(separator: " ")
-        
-        // Check for exact match of known character names in this screenplay
-        let knownCharacters = ["SARAH", "MIKE", "JESSICA", "DAVID", "EMILY", "RYAN"]
-        
-        // Standalone character names should be a single word
-        if words.count == 1 && knownCharacters.contains(String(words[0])) {
-            return true
-        }
-        
-        // Additional conditions for standalone character identification
-        let isAllLetters = trimmedLine.allSatisfy { $0.isLetter }
-        let isReasonableLength = trimmedLine.count >= 2 && trimmedLine.count <= 20
-        let isNotQuoted = !trimmedLine.hasPrefix("\"") && !trimmedLine.hasSuffix("\"")
-        
-        // Filter out common emphasized words or phrases
-        let nonCharacterTerms = ["LAUNCH DAY", "LAUNCH", "DAY", "YES", "NO", "WAIT", "STOP", "GO", "OK"]
-        let isNotCommonTerm = !nonCharacterTerms.contains(trimmedLine)
-        
-        // Check if there's dialog in the next line (further evidence it's a character name)
-        var hasDialogInNextLine = false
-        if lineIndex + 1 < allLines.count {
-            let nextLine = allLines[lineIndex + 1].trimmingCharacters(in: .whitespacesAndNewlines)
-            if !nextLine.isEmpty && nextLine != nextLine.uppercased() {
-                hasDialogInNextLine = true
-            }
-        }
-        
-        return isAllLetters && 
-               isReasonableLength && 
-               isNotQuoted && 
-               isNotCommonTerm &&
-               hasDialogInNextLine
-    }
-    
-    // Helper function to check if a line contains a character name with dialog
-    private static func isInlineCharacterWithDialog(_ line: String) -> Bool {
-        let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Character with dialog format: NAME dialog text...
-        let words = trimmedLine.split(separator: " ", maxSplits: 1)
-        if words.count < 2 {
-            return false
-        }
-        
-        let firstWord = String(words[0])
-        let remainingText = String(words[1])
-        
-        // First word must be ALL CAPS and be a plausible name
-        let isAllCaps = firstWord == firstWord.uppercased()
-        let isAllLetters = firstWord.allSatisfy { $0.isLetter }
-        let isReasonableLength = firstWord.count >= 2 && firstWord.count <= 20
-        
-        // The rest must start with lowercase (dialog)
-        let dialogStartsWithLowercase = remainingText.first?.isLowercase ?? false
-        
-        // Known character names in this screenplay
-        let knownCharacters = ["SARAH", "MIKE", "JESSICA", "DAVID", "EMILY", "RYAN"]
-        let isKnownCharacter = knownCharacters.contains(firstWord)
-        
-        return isAllCaps && isAllLetters && isReasonableLength && 
-               dialogStartsWithLowercase && isKnownCharacter
-    }
-    
-    // Helper function to identify character names
+
+    /// Checks if a line should be treated as a character cue (ALL CAPS, short, no punctuation that would
+    /// indicate a scene heading or transition).
     private static func isCharacterName(_ line: String) -> Bool {
-        let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Skip empty lines
-        if trimmedLine.isEmpty {
+        // Determines if the ENTIRE line is meant to be a character cue. A cue is
+        // typically ALL CAPS (optionally followed by a parenthetical such as
+        // "(CONT'D)") and nothing else.
+
+        var trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return false }
+
+        // Strip any trailing parenthetical so we can evaluate the core name.
+        if let parenStart = trimmed.firstIndex(of: "("), trimmed.last == ")" {
+            trimmed = String(trimmed[..<parenStart])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        // Reject obvious non-cues.
+        if isSceneHeading(trimmed) { return false }
+        let transitionKeywords = ["FADE", "CUT TO", "DISSOLVE"]
+        if transitionKeywords.contains(where: { trimmed.contains($0) }) {
             return false
         }
-        
-        // Get first word to check if it's a standalone name
-        var firstWord = trimmedLine
-        if let spaceIndex = trimmedLine.firstIndex(of: " ") {
-            firstWord = String(trimmedLine[..<spaceIndex])
-        }
-        
-        // Check if it's a name followed by dialog marker
-        let isNameWithDialog = trimmedLine.contains(":") && 
-                              trimmedLine.uppercased() == trimmedLine.prefix(upTo: trimmedLine.firstIndex(of: ":")!)
-        
-        // Character names are:
-        // 1. In ALL CAPS
-        // 2. Standalone word or short phrase (not an entire sentence in caps)
-        // 3. Not scene headings or special markers
-        
-        let isAllCaps = trimmedLine == trimmedLine.uppercased()
-        let isShortText = trimmedLine.count < 40
-        let hasNoLowercase = !trimmedLine.contains(where: { $0.isLowercase })
-        let wordCount = trimmedLine.split(separator: " ").count
-        let isReasonableNameLength = wordCount <= 3 || (isNameWithDialog && wordCount <= 5)
-        
-        // Exclude scene headings and special markers
-        let notSceneHeading = !trimmedLine.hasPrefix("INT.") && 
-                             !trimmedLine.hasPrefix("EXT.") &&
-                             !trimmedLine.contains("FADE") &&
-                             !trimmedLine.hasSuffix(":")
-        
-        // For this specific script example, we need a special case
-        // to recognize character names directly at start of lines
-        let appearsToBeCharacter = isAllCaps && 
-                                  hasNoLowercase && 
-                                  isReasonableNameLength && 
-                                  firstWord.count >= 2 &&
-                                  isShortText
-        
-        return appearsToBeCharacter && notSceneHeading
+
+        // Must be all caps (no lowercase letters).
+        let hasLowercase = trimmed.rangeOfCharacter(from: CharacterSet.lowercaseLetters) != nil
+        if hasLowercase { return false }
+
+        // Must be reasonably short and contain at most a few words.
+        if trimmed.count > 40 { return false }
+        if trimmed.split(separator: " ").count > 4 { return false }
+
+        // Should not contain a period unless it is an abbreviation like O.S. or V.O.
+        // We'll allow periods as long as every token is <=3 chars (heuristic).
+        let tokens = trimmed.split(separator: " ")
+        let invalidPeriod = tokens.contains { $0.contains(".") && $0.count > 4 }
+        if invalidPeriod { return false }
+
+        return true
     }
-    
-    // Helper function to check if a line starts with an ALL CAPS name
+
+    /// Checks if the first token on the line is ALL CAPS – used to detect compact formats like
+    /// "JOHN: Hey there" where the line contains both cue and dialogue.
     private static func isAllCapsNameAtStartOfLine(_ line: String) -> Bool {
-        let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Skip empty lines
-        if trimmedLine.isEmpty {
-            return false
-        }
-        
-        // Check for first word being ALL CAPS
-        let words = trimmedLine.split(separator: " ")
-        if words.isEmpty {
-            return false
-        }
-        
-        // A real character name would be standalone on a line (centered) or 
-        // followed by dialog that's not in all caps
-        
-        // Check if this is a quoted text like "LAUNCH DAY!" which isn't a character name
-        if trimmedLine.hasPrefix("\"") || trimmedLine.hasSuffix("\"") {
-            return false
-        }
-        
-        let firstWord = String(words[0])
-        
-        // Check if we have what looks like dialog after the potential name
-        let hasNonCapsTextAfterName = words.count > 1 && 
-                                     String(words[1]) != String(words[1]).uppercased()
-        
-        // Character names must be all letters (no symbols, quotes, etc)
-        let containsOnlyLetters = firstWord.allSatisfy { $0.isLetter }
-        
-        // Character names are typically ALL CAPS at the start
-        let isAllCaps = firstWord == firstWord.uppercased()
-        let hasLetters = firstWord.contains(where: { $0.isLetter })
-        let isReasonableLength = firstWord.count >= 2 && firstWord.count <= 20
-        
-        // Common words that aren't character names (scene directions, transitions, emphasized words)
-        let nonNameWords = ["INT", "EXT", "FADE", "CUT", "DISSOLVE", "ANGLE", "PAN", 
-                           "ZOOM", "THE", "AND", "BUT", "LAUNCH", "DAY", "A", "TO", 
-                           "OF", "ON", "IN", "THIS", "THAT", "THESE", "THOSE"]
-        let isNotCommonWord = !nonNameWords.contains(firstWord)
-        
-        // If it's a single word on a line and it matches our criteria, it's likely a character name
-        let isSingleWordOnLine = words.count == 1
-        
-        // Additional check for lines with parentheses, often scene direction with character descriptions
-        let containsParentheses = trimmedLine.contains("(") && trimmedLine.contains(")")
-        
-        // If there are parentheses, check if they're character descriptions or actor directions
-        // Character descriptions usually come after the name, not before
-        let isCharacterDescription = containsParentheses && 
-                                    trimmedLine.firstIndex(of: "(")! > trimmedLine.startIndex &&
-                                    // Make sure we don't incorrectly classify as character description 
-                                    // if the parentheses are just for a direction like (yelling)
-                                    !trimmedLine.contains { $0.isLowercase } // should contain some lowercase if a direction
-        
-        // Character names should have no punctuation (except possibly a colon)
-        let hasNoPunctuation = !firstWord.contains { $0.isPunctuation && $0 != ":" }
-        
-        // If there's only one word and it meets our criteria, it's likely a character name
-        if isSingleWordOnLine {
-            return isAllCaps && hasLetters && containsOnlyLetters && isReasonableLength && 
-                   isNotCommonWord && hasNoPunctuation && !containsParentheses
-        }
-        
-        // If there are multiple words but first is all caps and followed by non-caps, 
-        // it might be a character name followed by dialog
-        if hasNonCapsTextAfterName {
-            return isAllCaps && hasLetters && containsOnlyLetters && isReasonableLength && 
-                   isNotCommonWord && hasNoPunctuation
-        }
-        
-        // For character descriptions in parentheses, verify we have a name pattern first
-        if isCharacterDescription {
-            return false // This is narrative text with character description, not dialog
-        }
-        
-        return false // Default to not a character name for anything else
+        // Looks for compact inline dialogue like "SARAH: We'll ship tomorrow.".
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let colonIdx = trimmed.firstIndex(of: ":") else { return false }
+        let namePart = String(trimmed[..<colonIdx])
+
+        // Reject obvious headings.
+        if namePart.hasPrefix("INT") || namePart.hasPrefix("EXT") { return false }
+
+        let isAllCaps = namePart == namePart.uppercased()
+        if !isAllCaps { return false }
+
+        if namePart.count > 40 { return false }
+
+        return true
     }
-    
-    // Helper function to identify scene headings
+
+    /// Basic scene-heading detection purely from structural conventions (all caps INT./EXT. etc.).
     private static func isSceneHeading(_ line: String) -> Bool {
-        let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Skip empty lines
-        if trimmedLine.isEmpty {
-            return false
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return false }
+
+        // The vast majority of scene headings start with INT./EXT./I/E
+        let prefixes = ["INT.", "EXT.", "INT/EXT", "EXT/INT", "I/E", "INT ", "EXT "]
+        for p in prefixes {
+            if trimmed.uppercased().hasPrefix(p) { return true }
         }
-        
-        // Scene headings in standard screenplay format follow a few basic patterns:
-        
-        // 1. Most common form: starts with INT./EXT. followed by location
-        if trimmedLine.hasPrefix("INT.") || 
-           trimmedLine.hasPrefix("EXT.") || 
-           trimmedLine.hasPrefix("INT./EXT.") || 
-           trimmedLine.hasPrefix("I/E") ||
-           trimmedLine.hasPrefix("INTERIOR") ||
-           trimmedLine.hasPrefix("EXTERIOR") {
-            
-            return true
-        }
-        
-        // Special case: "FADE IN:" is a common screenplay marker
-        if trimmedLine == "FADE IN:" || trimmedLine == "FADE OUT:" ||
-           trimmedLine == "FADE IN" || trimmedLine == "FADE OUT" {
-            return true
-        }
-        
-        // 2. ALL CAPS location followed by time of day
-        let isAllCaps = trimmedLine == trimmedLine.uppercased()
-        let timeWords = ["DAY", "NIGHT", "MORNING", "EVENING", "DUSK", "DAWN", "AFTERNOON", "LATER", "CONTINUOUS"]
-        
-        // Check if the line ends with a time indicator and doesn't contain dialog punctuation
-        if isAllCaps && 
-           !trimmedLine.contains("!") && 
-           !trimmedLine.contains("?") && 
-           !trimmedLine.contains("(") {
-            
-            for timeWord in timeWords {
-                if trimmedLine.hasSuffix(timeWord) || 
-                   trimmedLine.contains(" - " + timeWord) ||
-                   trimmedLine.contains(" – " + timeWord) ||
-                   trimmedLine.contains(" — " + timeWord) {
-                    return true
-                }
-            }
-        }
-        
-        // 3. Numbered scene headings
-        if isAllCaps && 
-           (trimmedLine.hasPrefix("SCENE ") || 
-            trimmedLine.hasPrefix("SC. ") || 
-            (trimmedLine.hasPrefix("#") && trimmedLine.range(of: "^#\\d+", options: .regularExpression) != nil)) {
-            return true
-        }
-        
+
         return false
     }
-    
-    // Helper to split a narrative section that might contain character dialog
+
+    /// Detects a line that starts with an ALL-CAPS token followed by narrative
+    /// text (lower-case letters) – used to terminate the previous character’s
+    /// dialogue block.
+    private static func startsWithCapsNameAndNarrative(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let firstSpace = trimmed.firstIndex(of: " ") else { return false }
+        let firstToken = String(trimmed[..<firstSpace])
+
+        // Ensure the first token is all caps and not a scene heading.
+        guard !firstToken.isEmpty,
+              firstToken == firstToken.uppercased(),
+              !firstToken.hasPrefix("INT"),
+              !firstToken.hasPrefix("EXT") else { return false }
+
+        // Check for lowercase letters in remainder.
+        let remainder = trimmed[firstSpace...]
+        return remainder.rangeOfCharacter(from: CharacterSet.lowercaseLetters) != nil
+    }
+
+    /// Splits a narrative section that embeds character-dialogue shortcuts (e.g. "JOHN: Sure.  SARAH: Hi!")
+    /// into separate character sections.  If no embedded cues are detected the original section is returned.
     private static func splitNarrativeSectionWithDialogs(_ section: ScriptSection) -> [ScriptSection] {
-        var result: [ScriptSection] = []
-        
-        // Split the section into lines
-        let lines = section.text.components(separatedBy: .newlines)
-        var currentNarrative = ""
-        var i = 0
-        
-        // We need additional context for this screenplay format:
-        // 1. Real character dialog is typically a single name like "SARAH" on its own line
-        // 2. If there are no quotes around the ALL CAPS text, it's more likely to be a character name
-        // 3. Character names are not followed by exclamation marks (like "LAUNCH DAY!")
-        
-        while i < lines.count {
-            let line = lines[i]
-            let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            
-            if trimmedLine.isEmpty {
-                if !currentNarrative.isEmpty {
-                    currentNarrative += "\n"
+        var results: [ScriptSection] = []
+
+        // We look for "NAME: dialog" patterns.  Split the line accordingly.
+        let pattern = "([A-Z0-9 \\']{2,40}):\\s*([^\\n]+)" // very loose, stop at newline
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
+            return [section]
+        }
+
+        let nsText = section.text as NSString
+        let matches = regex.matches(in: section.text, options: [], range: NSRange(location: 0, length: nsText.length))
+        if matches.isEmpty {
+            // No inline dialog patterns – keep as is.
+            return [section]
+        }
+
+        var lastIndex = 0
+        for match in matches {
+            // Add any preceding narrative as its own section.
+            if match.range.location > lastIndex {
+                let narrativeRange = NSRange(location: lastIndex, length: match.range.location - lastIndex)
+                let narrative = nsText.substring(with: narrativeRange).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !narrative.isEmpty {
+                    results.append(ScriptSection(type: .narrator, text: narrative))
                 }
-                i += 1
-                continue
             }
-            
-            // Check if this is a standalone character name (centered on its own line)
-            let isStandaloneCharacterName = isStandaloneCharacter(line, i, lines)
-            
-            // Check if this is a character name with dialog following on the same line
-            let isInlineCharacterDialog = isInlineCharacterWithDialog(line)
-            
-            if isStandaloneCharacterName || isInlineCharacterDialog {
-                // Add any accumulated narrative first
-                if !currentNarrative.isEmpty {
-                    result.append(ScriptSection(type: .narrator, text: currentNarrative.trimmingCharacters(in: .whitespacesAndNewlines)))
-                    currentNarrative = ""
-                }
-                
-                // Extract character name
-                let characterName = extractCharacterName(line)
-                var characterSection = characterName
-                
-                // Add dialog from this line if any (for inline dialog)
-                if isInlineCharacterDialog {
-                    let dialogInLine = extractDialogFromLine(line)
-                    if !dialogInLine.isEmpty {
-                        characterSection += "\n" + dialogInLine
-                    }
-                }
-                
-                // Look ahead for continued dialog 
-                // (especially important for standalone character names)
-                var j = i + 1
-                var foundMoreDialog = false
-                
-                while j < lines.count {
-                    let nextLine = lines[j]
-                    let nextTrimmed = nextLine.trimmingCharacters(in: .whitespacesAndNewlines)
-                    
-                    if nextTrimmed.isEmpty {
-                        characterSection += "\n"
-                        j += 1
-                        continue
-                    }
-                    
-                    // Stop at next character name or scene heading
-                    if isStandaloneCharacter(nextLine, j, lines) || 
-                       isInlineCharacterWithDialog(nextLine) || 
-                       isSceneHeading(nextLine) {
-                        break
-                    }
-                    
-                    // Add line to dialog
-                    characterSection += "\n" + nextLine
-                    foundMoreDialog = true
-                    j += 1
-                }
-                
-                // Only add as character if we found dialog
-                if isStandaloneCharacterName && !foundMoreDialog {
-                    // Edge case: standalone character name with no dialog
-                    // Treat as narrative instead
-                    if !currentNarrative.isEmpty {
-                        currentNarrative += "\n"
-                    }
-                    currentNarrative += line
-                    i += 1
-                } else {
-                    // Add the character section with dialog
-                    result.append(ScriptSection(type: .character, text: characterSection.trimmingCharacters(in: .whitespacesAndNewlines)))
-                    
-                    // Move forward past the processed lines
-                    i = foundMoreDialog ? j : i + 1
-                }
-            } else {
-                // Regular narrative
-                if !currentNarrative.isEmpty {
-                    currentNarrative += "\n"
-                }
-                currentNarrative += line
-                i += 1
+
+            // Character name and dialog
+            if match.numberOfRanges >= 3 {
+                let name = nsText.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+                let dialog = nsText.substring(with: match.range(at: 2)).trimmingCharacters(in: .whitespacesAndNewlines)
+                let combined = name + "\n" + dialog
+                results.append(ScriptSection(type: .character, text: combined))
+            }
+
+            lastIndex = match.range.location + match.range.length
+        }
+
+        // Append any trailing narrative
+        if lastIndex < nsText.length {
+            let tailRange = NSRange(location: lastIndex, length: nsText.length - lastIndex)
+            let tail = nsText.substring(with: tailRange).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !tail.isEmpty {
+                results.append(ScriptSection(type: .narrator, text: tail))
             }
         }
-        
-        // Add any remaining narrative
-        if !currentNarrative.isEmpty {
-            result.append(ScriptSection(type: .narrator, text: currentNarrative.trimmingCharacters(in: .whitespacesAndNewlines)))
-        }
-        
-        return result
+
+        return results.isEmpty ? [section] : results
     }
 }
