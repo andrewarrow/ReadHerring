@@ -113,6 +113,59 @@ public class ScriptParserLogic {
         while i < lines.count {
             let line = lines[i]
             let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // ------------------------------------------------------------
+            // NEW: Detect the common screenplay layout
+            //      "        CHARACTER      Dialogue starts here" pattern.
+            //      The character cue is in ALL-CAPS and separated from the
+            //      dialogue by at least two consecutive spaces.  This is a
+            //      very common format produced by PDF text extraction and
+            //      was previously mis-detected as a narrative/action line.
+            // ------------------------------------------------------------
+
+            if let (inlineCharacter, firstDialog) = extractInlineCharacterDialogue(from: line) {
+                // Flush any pending narrative before we start a new character
+                if !currentSection.isEmpty {
+                    sections.append(ScriptSection(type: currentSectionType,
+                                                   text: currentSection.trimmingCharacters(in: .whitespacesAndNewlines)))
+                    currentSection = ""
+                }
+
+                // Start building the character section
+                currentSectionType = .character
+                currentSection = inlineCharacter + "\n" + firstDialog
+
+                // Look ahead for additional dialogue lines that belong to the
+                // same character.  We keep consuming lines until we encounter
+                // a blank line, another character cue, or a scene heading.
+                var j = i + 1
+                while j < lines.count {
+                    let nextRaw = lines[j]
+                    let nextTrimmed = nextRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                    // Stop conditions
+                    if nextTrimmed.isEmpty ||
+                       isSceneHeading(nextRaw) ||
+                       isCharacterName(nextRaw) ||
+                       isAllCapsNameAtStartOfLine(nextRaw) ||
+                       extractInlineCharacterDialogue(from: nextRaw) != nil {
+                        break
+                    }
+
+                    currentSection += "\n" + nextRaw
+                    j += 1
+                }
+
+                // Save the character section
+                sections.append(ScriptSection(type: .character,
+                                               text: currentSection.trimmingCharacters(in: .whitespacesAndNewlines)))
+
+                // Reset state for next iteration
+                currentSection = ""
+                currentSectionType = .narrator
+                i = j
+                continue
+            }
             
             // Check if this might be a character name followed by potential dialogue
             // using STRUCTURAL patterns (not specific content matching)
@@ -924,5 +977,54 @@ public class ScriptParserLogic {
         }
 
         return results.isEmpty ? [section] : results
+    }
+
+    // MARK: - New Helper
+
+    /// Detects lines in the format "<indent>CHARACTER    dialog...".
+    /// Returns the character name and the first line of dialog if the pattern
+    /// matches, otherwise `nil`.
+    ///
+    /// The detection is purely based on structural cues:
+    ///   * Leading whitespace (at least two spaces) – indicates indentation
+    ///   * An ALL-CAPS token (character cue) up to 40 characters
+    ///   * Two or more consecutive spaces separating the character cue and the
+    ///     dialogue text
+    ///   * No reliance on actual English word lists
+    private static func extractInlineCharacterDialogue(from line: String) -> (String, String)? {
+        // Quick rejection – need multiple spaces inside the line so we have two
+        // distinct columns.  Using "  " (two spaces) as the minimal separator
+        // gives us a fast path out for the vast majority of lines.
+        guard line.contains("  ") else { return nil }
+
+        // Regular expression explained:
+        // ^\s*            => optional indentation at start of line
+        // ([A-Z0-9'\- ]{2,40}?) => capture group 1: ALL CAPS token (incl. spaces
+        //                           for multi-word names) 2-40 chars long
+        // \s{2,}          => separator of at least two spaces (column gap)
+        // (.+?)           => capture group 2: the rest of the line (dialogue)
+        // $               => until end of line
+        let pattern = "^\\s*([A-Z0-9'\\- ]{2,40})\\s{2,}(.+)$"
+
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
+            return nil
+        }
+
+        let nsLine = line as NSString
+        let range = NSRange(location: 0, length: nsLine.length)
+        guard let match = regex.firstMatch(in: line, options: [], range: range), match.numberOfRanges == 3 else {
+            return nil
+        }
+
+        let charName = nsLine.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespaces)
+
+        // Ensure the cue is ALL CAPS – structural requirement for character names.
+        let isAllCaps = charName == charName.uppercased()
+        if !isAllCaps || charName.count < 2 {
+            return nil
+        }
+
+        let dialog = nsLine.substring(with: match.range(at: 2)).trimmingCharacters(in: .whitespaces)
+        return (charName, dialog)
     }
 }
