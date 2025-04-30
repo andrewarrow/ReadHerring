@@ -1,8 +1,53 @@
 import Foundation
 import PDFKit
 import AVFoundation
+import Vision // <-- Add Vision import
+import UIKit // <-- Add UIKit for UIImage/CGRect
 
-// Script section model
+// --- Data Structures for Vision Results ---
+
+// Represents a single block of text recognized by Vision
+struct TextBlock: Identifiable {
+    let id = UUID()
+    let text: String
+    let boundingBox: CGRect // Coordinates relative to the page image
+    let confidence: Float
+}
+
+// Represents a line of text, potentially composed of multiple TextBlocks
+struct TextLine: Identifiable {
+    let id = UUID()
+    var blocks: [TextBlock] = []
+    var boundingBox: CGRect {
+        guard !blocks.isEmpty else { return .zero }
+        // Calculate the union of all block boxes in the line
+        return blocks.reduce(blocks[0].boundingBox) { $0.union($1.boundingBox) }
+    }
+    var text: String {
+        // Sort blocks horizontally before joining
+        blocks.sorted { $0.boundingBox.minX < $1.boundingBox.minX }
+              .map { $0.text }
+              .joined(separator: " ")
+    }
+}
+
+// Represents a paragraph, composed of multiple TextLines
+struct Paragraph: Identifiable {
+    let id = UUID()
+    var lines: [TextLine] = []
+    var boundingBox: CGRect {
+        guard !lines.isEmpty else { return .zero }
+        // Calculate the union of all line boxes in the paragraph
+        return lines.reduce(lines[0].boundingBox) { $0.union($1.boundingBox) }
+    }
+    var text: String {
+        lines.map { $0.text }.joined(separator: "\n")
+    }
+}
+
+
+// --- Original Script Section Model ---
+// Note: This might need to be replaced or adapted based on the output of processExtractedText
 public struct ScriptSection: Identifiable, Equatable {
     public let id = UUID()
     public let type: SectionType
@@ -118,8 +163,12 @@ public class ScriptParserLogic {
             // Check for strong character indicators (name followed by dialog)
             let isCharacterWithDialog = !potentialCharacter.isEmpty && restOfLine.starts(with: ":")
             
-            // Check if line starts with a character name pattern
-            if (isCharacterName(line) || (i > 0 && isAllCapsNameAtStartOfLine(line))) && !isSceneHeading(line) {
+            // Detect character cue lines (pure ALL-CAPS) – but exclude narrative
+            // action lines that start with a name followed by lowercase
+            // narrative such as "JESSICA (30s …) bounds in …".
+            if !startsWithCapsNameAndNarrative(line) &&
+               (isCharacterName(line) || (i > 0 && isAllCapsNameAtStartOfLine(line))) &&
+               !isSceneHeading(line) {
                 // Make sure to add any pending non-empty section
                 if !currentSection.isEmpty {
                     sections.append(ScriptSection(type: currentSectionType, text: currentSection.trimmingCharacters(in: .whitespacesAndNewlines)))
@@ -211,8 +260,11 @@ public class ScriptParserLogic {
         }
         
         print("DEBUG: Screenplay parsing complete - created \(processedSections.count) total sections")
+        // TODO: Replace with sections derived from processExtractedText
         return processedSections
     }
+    
+    // MARK: - Text Processing (Original - May need removal/adaptation)
     
     /// Process text for proper wrapping, joining lines and preserving paragraph breaks
     /// - Parameter lines: Array of text lines to process
@@ -347,9 +399,278 @@ public class ScriptParserLogic {
         return "random"
     }
     
-    // MARK: - PDF Processing
+    // MARK: - PDF Processing with Vision
     
-    /// Extract text content from a PDF file
+    /// Extracts text using Vision framework to get layout information.
+    /// - Parameter pdfURL: URL of the PDF file to process.
+    /// - Returns: An array of Paragraphs for each page (or potentially ScriptSections later).
+    ///   Note: This example modifies the function to be synchronous for simplicity,
+    ///   but real-world use might require asynchronous handling.
+    static func extractTextWithLayout(from pdfURL: URL) -> [Int: [Paragraph]] {
+        guard let pdf = PDFDocument(url: pdfURL) else {
+            print("DEBUG: Could not load PDF")
+            return [:]
+        }
+        
+        var allPageParagraphs: [Int: [Paragraph]] = [:]
+        
+        print("DEBUG: Processing PDF with \(pdf.pageCount) pages using Vision...")
+        
+        for i in 0..<pdf.pageCount {
+            guard let page = pdf.page(at: i) else {
+                print("DEBUG: Could not get page \(i)")
+                continue
+            }
+            
+            // 1. Convert PDF page to image
+            let pageRect = page.bounds(for: .mediaBox)
+            // Increase resolution for better OCR - adjust scale as needed
+            let scale: CGFloat = 2.0
+            let imageSize = CGSize(width: pageRect.width * scale, height: pageRect.height * scale)
+            
+            let renderer = UIGraphicsImageRenderer(size: imageSize)
+            let pageImage = renderer.image { ctx in
+                UIColor.white.set()
+                ctx.fill(CGRect(origin: .zero, size: imageSize))
+                
+                ctx.cgContext.translateBy(x: 0, y: imageSize.height)
+                ctx.cgContext.scaleBy(x: scale, y: -scale) // Apply scale here
+                
+                page.draw(with: .mediaBox, to: ctx.cgContext)
+            }
+            
+            print("DEBUG: Generated image for page \(i+1) with size \(imageSize)")
+            
+            // 2. Use Vision framework for text recognition with layout
+            // Using a semaphore to wait for the async Vision task (simplification for this example)
+            let semaphore = DispatchSemaphore(value: 0)
+            var pageParagraphs: [Paragraph] = []
+            
+            performTextRecognition(on: pageImage, pageIndex: i) { paragraphs in
+                pageParagraphs = paragraphs
+                semaphore.signal()
+            }
+            
+            _ = semaphore.wait(timeout: .distantFuture) // Wait for Vision to complete
+            allPageParagraphs[i] = pageParagraphs
+            print("DEBUG: Finished Vision processing for page \(i+1), found \(pageParagraphs.count) paragraphs.")
+        }
+        
+        print("DEBUG: Finished processing all pages.")
+        return allPageParagraphs
+    }
+
+    /// Performs text recognition on a given image using Vision.
+    private static func performTextRecognition(on image: UIImage, pageIndex: Int, completion: @escaping ([Paragraph]) -> Void) {
+        guard let cgImage = image.cgImage else {
+            print("DEBUG: Could not get CGImage for page \(pageIndex + 1)")
+            completion([])
+            return
+        }
+        
+        let request = VNRecognizeTextRequest { request, error in
+            guard error == nil,
+                  let observations = request.results as? [VNRecognizedTextObservation] else {
+                print("DEBUG: Vision request failed or no observations for page \(pageIndex + 1). Error: \(error?.localizedDescription ?? "Unknown")")
+                completion([])
+                return
+            }
+            
+            var textBlocks: [TextBlock] = []
+            
+            for observation in observations {
+                if let recognizedText = observation.topCandidates(1).first {
+                    let boundingBox = observation.boundingBox // Normalized coordinates
+                    
+                    // Convert normalized coordinates to image coordinates (origin top-left)
+                    let imgWidth = image.size.width
+                    let imgHeight = image.size.height
+                    let x = boundingBox.origin.x * imgWidth
+                    let y = (1 - boundingBox.origin.y - boundingBox.height) * imgHeight // Invert Y
+                    let width = boundingBox.width * imgWidth
+                    let height = boundingBox.height * imgHeight
+                    
+                    let block = TextBlock(
+                        text: recognizedText.string,
+                        boundingBox: CGRect(x: x, y: y, width: width, height: height),
+                        confidence: recognizedText.confidence
+                    )
+                    textBlocks.append(block)
+                }
+            }
+            
+            print("DEBUG: Page \(pageIndex + 1): Found \(textBlocks.count) raw text blocks from Vision.")
+            
+            // Group raw blocks into lines using spatial clustering
+            let textLines = groupIntoLines(textBlocks)
+            print("DEBUG: Page \(pageIndex + 1): Grouped into \(textLines.count) lines.")
+            
+            // Group lines into paragraphs using spatial clustering
+            let paragraphs = groupIntoParagraphs(textLines)
+            print("DEBUG: Page \(pageIndex + 1): Grouped into \(paragraphs.count) paragraphs.")
+
+            // Process the paragraphs to identify screenplay structure (placeholder)
+            processExtractedText(paragraphs, for: pageIndex)
+
+            completion(paragraphs) // Return the structured paragraphs
+        }
+        
+        // Configure request
+        request.recognitionLevel = .accurate // Or .fast
+        request.usesLanguageCorrection = true
+        // Add languages if needed, e.g., request.recognitionLanguages = ["en-US", "fr-FR"]
+
+        // Perform request
+        let requestHandler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        do {
+            try requestHandler.perform([request])
+        } catch {
+            print("DEBUG: Failed to perform Vision request for page \(pageIndex + 1): \(error)")
+            completion([])
+        }
+    }
+
+    // MARK: - Spatial Grouping Logic
+
+    /// Groups individual TextBlocks into TextLines based on vertical proximity.
+    private static func groupIntoLines(_ blocks: [TextBlock], lineProximityThreshold: CGFloat = 10.0) -> [TextLine] {
+        guard !blocks.isEmpty else { return [] }
+
+        // Sort blocks primarily by Y coordinate, then X for tie-breaking
+        let sortedBlocks = blocks.sorted {
+            if abs($0.boundingBox.midY - $1.boundingBox.midY) < lineProximityThreshold {
+                return $0.boundingBox.minX < $1.boundingBox.minX // Same line, sort by X
+            }
+            return $0.boundingBox.midY < $1.boundingBox.midY // Different lines, sort by Y
+        }
+
+        var lines: [TextLine] = []
+        var currentLine = TextLine()
+
+        for block in sortedBlocks {
+            if currentLine.blocks.isEmpty {
+                // First block always starts a new line
+                currentLine.blocks.append(block)
+            } else {
+                // Check if the block is vertically close enough to the current line's center
+                let currentLineCenterY = currentLine.boundingBox.midY
+                if abs(block.boundingBox.midY - currentLineCenterY) < lineProximityThreshold {
+                    // Add block to the current line
+                    currentLine.blocks.append(block)
+                } else {
+                    // Block is too far vertically, finish the current line and start a new one
+                    if !currentLine.blocks.isEmpty {
+                        // Sort blocks within the completed line by X before adding
+                        currentLine.blocks.sort { $0.boundingBox.minX < $1.boundingBox.minX }
+                        lines.append(currentLine)
+                    }
+                    currentLine = TextLine(blocks: [block]) // Start new line with current block
+                }
+            }
+        }
+
+        // Add the last processed line
+        if !currentLine.blocks.isEmpty {
+            currentLine.blocks.sort { $0.boundingBox.minX < $1.boundingBox.minX }
+            lines.append(currentLine)
+        }
+
+        return lines
+    }
+
+    /// Groups TextLines into Paragraphs based on vertical spacing.
+    private static func groupIntoParagraphs(_ lines: [TextLine], paragraphSpacingThreshold: CGFloat = 15.0) -> [Paragraph] {
+         guard !lines.isEmpty else { return [] }
+
+         // Lines should already be sorted vertically by groupIntoLines
+         var paragraphs: [Paragraph] = []
+         var currentParagraph = Paragraph()
+
+         for (index, line) in lines.enumerated() {
+             if currentParagraph.lines.isEmpty {
+                 // First line always starts a new paragraph
+                 currentParagraph.lines.append(line)
+             } else {
+                 guard let previousLine = currentParagraph.lines.last else { continue } // Should always have a line
+
+                 // Calculate vertical distance between the bottom of the previous line and the top of the current line
+                 let verticalDistance = line.boundingBox.minY - previousLine.boundingBox.maxY
+
+                 // Use line height as part of the threshold? Average line height could be calculated.
+                 // For simplicity, using a fixed threshold for now.
+                 if verticalDistance < paragraphSpacingThreshold {
+                     // Lines are close enough, add to the current paragraph
+                     currentParagraph.lines.append(line)
+                 } else {
+                     // Gap is too large, finish the current paragraph and start a new one
+                     if !currentParagraph.lines.isEmpty {
+                         paragraphs.append(currentParagraph)
+                     }
+                     currentParagraph = Paragraph(lines: [line]) // Start new paragraph
+                 }
+             }
+         }
+
+         // Add the last processed paragraph
+         if !currentParagraph.lines.isEmpty {
+             paragraphs.append(currentParagraph)
+         }
+
+         return paragraphs
+     }
+
+    // MARK: - Screenplay Structure Processing (Placeholder)
+
+    /// Processes the grouped paragraphs to identify screenplay elements.
+    /// This is where the core logic translation from the Python scripts would happen.
+    private static func processExtractedText(_ paragraphs: [Paragraph], for pageIndex: Int) {
+        print("DEBUG: Page \(pageIndex + 1): Processing \(paragraphs.count) paragraphs for screenplay structure...")
+
+        for (index, paragraph) in paragraphs.enumerated() {
+            // --- Placeholder Logic ---
+            // Here you would analyze:
+            // 1. Indentation: paragraph.boundingBox.minX relative to page width or common trends.
+            // 2. Capitalization: paragraph.text.uppercased() == paragraph.text
+            // 3. Keywords: paragraph.text.contains("INT."), paragraph.text.contains("EXT."), paragraph.text.contains("FADE IN"), etc.
+            // 4. Line Structure: Number of lines, presence of colons (e.g., "NAME: Dialog").
+            // 5. Column Detection: Check if multiple paragraphs have similar Y ranges but distinct X ranges.
+            //    - This might require looking at TextLines across paragraphs or modifying grouping logic.
+            // 6. Context: Analyze paragraph type based on the previous paragraph's type.
+
+            // Example basic checks (very rudimentary):
+            let text = paragraph.text
+            let xPos = paragraph.boundingBox.minX
+            let isAllCaps = text == text.uppercased() && text.rangeOfCharacter(from: .letters) != nil
+
+            print("--- Paragraph \(index + 1) (X: \(Int(xPos)), Y: \(Int(paragraph.boundingBox.minY))) ---")
+            print(text)
+
+            if isAllCaps && (text.hasPrefix("INT.") || text.hasPrefix("EXT.") || text.hasPrefix("I/E.")) {
+                 print("-> Potential Scene Heading")
+            } else if isAllCaps && text.count < 50 && !text.contains("\n") && xPos > 150 && xPos < 400 { // Heuristic X range for character
+                 print("-> Potential Character Cue")
+            } else if text.contains(":") && !isAllCaps && xPos > 150 && xPos < 400 {
+                 print("-> Potential Character Cue with inline Dialogue?") // Needs more robust check
+            } else if isAllCaps && (text.contains("FADE") || text.contains("CUT TO") || text.contains("DISSOLVE")) {
+                 print("-> Potential Transition")
+            } else {
+                 // Could be Action or Dialogue depending on context and indentation
+                 // Need to track if the previous element was a Character Cue.
+                 print("-> Potential Action/Dialogue")
+            }
+            print("--------------------")
+            // --- End Placeholder ---
+
+            // TODO: Replace placeholder logic with robust screenplay element identification
+            //       based on the Python scripts' rules, using paragraph/line bounding boxes and text.
+            //       This will involve creating final ScriptSection objects with the correct type.
+        }
+    }
+
+
+    // MARK: - Original PDF Text Extraction (Fallback/Alternative)
+    
+    /// Extract text content from a PDF file using PDFKit's basic text extraction.
     /// - Parameter pdfURL: URL of the PDF file to process
     /// - Returns: The extracted text content
     public static func extractTextFromPDF(at pdfURL: URL) -> String {
@@ -385,10 +706,12 @@ public class ScriptParserLogic {
         }
         
         print("DEBUG: Total extracted text: \(fullText.count) characters")
+        // Note: This original function might be kept as a fallback if Vision fails,
+        // or removed if Vision is the primary method.
         return fullText
     }
     
-    // MARK: - Helper functions for screenplay parsing
+    // MARK: - Helper functions for screenplay parsing (Original - May need removal/adaptation)
 
     /// Checks if a line should be treated as a character cue (ALL CAPS, short, no punctuation that would
     /// indicate a scene heading or transition).

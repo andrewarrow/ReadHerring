@@ -493,7 +493,9 @@ struct ScriptParserView: View {
         // Extract text using the logic class
         let fullText = ScriptParserLogic.extractTextFromPDF(at: pdfURL)
         
-        if !fullText.starts(with: "Failed") {
+        if !fullText.isEmpty {
+            // Process the extracted text
+            
             // Update state with the PDF content
             screenplayText = fullText
             parsedSections = ScriptParserLogic.parseScreenplay(fullText)
@@ -505,6 +507,7 @@ struct ScriptParserView: View {
             // If PDF loading failed, use a fallback text for testing
             screenplayText = "Failed to load PDF content"
             parsedSections = ScriptParserLogic.parseScreenplay(screenplayText)
+            print("DEBUG: Failed to extract text from PDF")
         }
         
         isLoading = false
