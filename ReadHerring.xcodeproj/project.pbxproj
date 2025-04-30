@@ -33,6 +33,7 @@
 		001E37A32DBFD80800CFB28E /* VoiceSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37A22DBFD80800CFB28E /* VoiceSelectionView.swift */; };
 		001E37A52DBFE27500CFB28E /* DocumentPickerUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001E37A42DBFE27500CFB28E /* DocumentPickerUI.swift */; };
 		005659642DC14B0C001793AE /* ScriptParserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 005659632DC14B0C001793AE /* ScriptParserView.swift */; };
+		00FFE8AC2DC1A53C00FA038D /* ScriptParserLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00FFE8AB2DC1A53C00FA038D /* ScriptParserLogic.swift */; };
 		AA0000000000000000000001 /* ReadHerringApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000011 /* ReadHerringApp.swift */; };
 		AA0000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000012 /* ContentView.swift */; };
 /* End PBXBuildFile section */
@@ -63,6 +64,7 @@
 		001E37A22DBFD80800CFB28E /* VoiceSelectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSelectionView.swift; sourceTree = "<group>"; };
 		001E37A42DBFE27500CFB28E /* DocumentPickerUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentPickerUI.swift; sourceTree = "<group>"; };
 		005659632DC14B0C001793AE /* ScriptParserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScriptParserView.swift; sourceTree = "<group>"; };
+		00FFE8AB2DC1A53C00FA038D /* ScriptParserLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScriptParserLogic.swift; sourceTree = "<group>"; };
 		AA0000000000000000000010 /* ReadHerring.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ReadHerring.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000011 /* ReadHerringApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadHerringApp.swift; sourceTree = "<group>"; };
 		AA0000000000000000000012 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -97,6 +99,7 @@
 		001E375E2DBE8DBC00CFB28E /* Utils */ = {
 			isa = PBXGroup;
 			children = (
+				00FFE8AB2DC1A53C00FA038D /* ScriptParserLogic.swift */,
 				001E37802DBED47400CFB28E /* DocumentPickerDelegate.swift */,
 				001E375B2DBE8DBC00CFB28E /* DocumentPickerViewController.swift */,
 				001E375C2DBE8DBC00CFB28E /* PDFProcessor.swift */,
@@ -225,6 +228,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				00FFE8AC2DC1A53C00FA038D /* ScriptParserLogic.swift in Sources */,
 				AA0000000000000000000002 /* ContentView.swift in Sources */,
 				001E37A32DBFD80800CFB28E /* VoiceSelectionView.swift in Sources */,
 				001E37642DBE8DBC00CFB28E /* FileSelectionView.swift in Sources */,

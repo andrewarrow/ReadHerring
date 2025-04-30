@@ -53,7 +53,7 @@ struct ScriptParserView: View {
             } else {
                 // Fall back to Parse Script button if no sections loaded
                 Button("Parse Script") {
-                    parsedSections = parseScreenplay(screenplayText)
+                    parsedSections = ScriptParserLogic.parseScreenplay(screenplayText)
                     currentSectionIndex = 0
                 }
                 .buttonStyle(.borderedProminent)
@@ -215,32 +215,9 @@ struct ScriptParserView: View {
         }
     }
     
-    // Helper to process text for proper wrapping
+    // Helper to process text for proper wrapping (using ScriptParserLogic)
     private func processTextForWrapping(_ lines: [String]) -> String {
-        var result = ""
-        var previousLineEmpty = false
-        
-        for line in lines {
-            let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            
-            if trimmedLine.isEmpty {
-                // Only add one newline for empty lines and avoid consecutive empty lines
-                if !previousLineEmpty && !result.isEmpty {
-                    result += "\n"
-                }
-                previousLineEmpty = true
-            } else {
-                // If it's not the first line and the previous line wasn't empty, 
-                // add a space instead of a newline
-                if !result.isEmpty && !previousLineEmpty {
-                    result += " "
-                }
-                result += trimmedLine
-                previousLineEmpty = false
-            }
-        }
-        
-        return result
+        return ScriptParserLogic.processTextForWrapping(lines)
     }
     
     // Scene heading formatting
@@ -452,8 +429,9 @@ struct ScriptParserView: View {
             }
             
             character = lines[0].trimmingCharacters(in: .whitespacesAndNewlines)
-            // Skip the character name line and join the rest
-            textToSpeak = lines.dropFirst().joined(separator: " ")
+            // Skip the character name line and join the rest with proper spacing
+            let dialogLines = Array(lines.dropFirst())
+            textToSpeak = processTextForWrapping(dialogLines)
         } else {
             character = CharacterVoices.NARRATOR_KEY
             textToSpeak = section.text
@@ -462,18 +440,8 @@ struct ScriptParserView: View {
         // Get the voice for this character
         guard let voice = CharacterVoices.shared.getVoiceFor(character: character) else { return }
         
-        // Clean text by removing stage directions (text in parentheses)
-        var cleanTextToSpeak = textToSpeak.replacingOccurrences(
-            of: "\\(.*?\\)",
-            with: "",
-            options: .regularExpression
-        ).trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Replace INT. with "interior" and EXT. with "exterior" for narration
-        if character == CharacterVoices.NARRATOR_KEY {
-            cleanTextToSpeak = cleanTextToSpeak.replacingOccurrences(of: "INT.", with: "Interior")
-            cleanTextToSpeak = cleanTextToSpeak.replacingOccurrences(of: "EXT.", with: "Exterior")
-        }
+        // Clean text for speech using the logic class
+        let cleanTextToSpeak = ScriptParserLogic.cleanTextForSpeech(textToSpeak, isNarrator: character == CharacterVoices.NARRATOR_KEY)
         
         // Create and configure the utterance
         let utterance = AVSpeechUtterance(string: cleanTextToSpeak)
@@ -522,50 +490,24 @@ struct ScriptParserView: View {
             }
         }
         
-        // Load PDF document
-        if let pdf = PDFDocument(url: pdfURL) {
-            print("DEBUG: Successfully loaded PDF with \(pdf.pageCount) pages")
-            var fullText = ""
-            
-            // Extract text from each page
-            for i in 0..<pdf.pageCount {
-                if let page = pdf.page(at: i) {
-                    let pageText = page.string ?? ""
-                    
-                    if !pageText.isEmpty {
-                        print("DEBUG: Page \(i+1) has \(pageText.count) characters of text")
-                        fullText += pageText + "\n"
-                    } else {
-                        print("DEBUG: Page \(i+1) has no text, using OCR")
-                        // Use OCR for this page if no text is available
-                        let pageImage = page.thumbnail(of: CGSize(width: 1024, height: 1024), for: .mediaBox)
-                        if pageImage.cgImage != nil {
-                            let ocrText = PDFProcessor.performOCR(on: pageImage)
-                            print("DEBUG: OCR extracted \(ocrText.count) characters")
-                            fullText += ocrText + "\n"
-                        }
-                    }
-                }
-            }
-            
-            print("DEBUG: Total extracted text: \(fullText.count) characters")
-            
+        // Extract text using the logic class
+        let fullText = ScriptParserLogic.extractTextFromPDF(at: pdfURL)
+        
+        if !fullText.starts(with: "Failed") {
             // Update state with the PDF content
             screenplayText = fullText
-            parsedSections = parseScreenplay(fullText)
+            parsedSections = ScriptParserLogic.parseScreenplay(fullText)
             print("DEBUG: Parsed into \(parsedSections.count) sections")
             
             // Assign random voices for narrator and characters
             assignInitialVoices()
-            
-            isLoading = false
         } else {
-            print("DEBUG: Failed to load PDF document")
             // If PDF loading failed, use a fallback text for testing
             screenplayText = "Failed to load PDF content"
-            parsedSections = parseScreenplay(screenplayText)
-            isLoading = false
+            parsedSections = ScriptParserLogic.parseScreenplay(screenplayText)
         }
+        
+        isLoading = false
     }
     
     // MARK: - Voice Assignment
@@ -623,400 +565,19 @@ struct ScriptParserView: View {
     
     // Helper function to determine gender from character name
     private func detectGenderFromName(_ name: String) -> String {
-        // Common male name endings and patterns
-        let malePatterns = [
-            "MR\\.", "MR ", // Mr.
-            "\\bJOHN\\b", "\\bJACK\\b", "\\bJAMES\\b", "\\bDAVID\\b", "\\bMICHAEL\\b", "\\bROBERT\\b", 
-            "\\bWILLIAM\\b", "\\bJOSEPH\\b", "\\bTHOMAS\\b", "\\bCHARLES\\b", "\\bCHRISTOPHER\\b", 
-            "\\bDANIEL\\b", "\\bMATTHEW\\b", "\\bANTHONY\\b", "\\bDONALD\\b", "\\bMARK\\b", "\\bPAUL\\b", 
-            "\\bSTEVEN\\b", "\\bANDREW\\b", "\\bKENNETH\\b", "\\bJOSHUA\\b", "\\bKEVIN\\b", "\\bBRIAN\\b", 
-            "\\bGEORGE\\b", "\\bTIMOTHY\\b", "\\bRON\\b", "\\bJEFF\\b", "\\bGREG\\b",
-            "\\bHE\\b", "\\bHIM\\b", "\\bMAN\\b", "\\bBOY\\b", "\\bGUY\\b", "\\bFATHER\\b", "\\bDAD\\b",
-            "\\bSON\\b", "\\bBROTHER\\b", "\\bUNCLE\\b"
-        ]
-        
-        // Common female name endings and patterns
-        let femalePatterns = [
-            "MS\\.", "MS ", "MRS\\.", "MRS ", "MISS ", // Ms., Mrs., Miss
-            "\\bMARY\\b", "\\bPATRICIA\\b", "\\bJENNIFER\\b", "\\bLINDA\\b", "\\bELIZABETH\\b", 
-            "\\bBARBARA\\b", "\\bSUSAN\\b", "\\bJESSICA\\b", "\\bSARAH\\b", "\\bKAREN\\b", 
-            "\\bLISA\\b", "\\bNANCY\\b", "\\bBETTY\\b", "\\bMARGARET\\b", "\\bSANDRA\\b", "\\bASHLEY\\b", 
-            "\\bKIMBERLY\\b", "\\bEMILY\\b", "\\bDONNA\\b", "\\bMICHELLE\\b", "\\bDOROTHY\\b", "\\bCAROL\\b", 
-            "\\bAMANDA\\b", "\\bMELISSA\\b", "\\bDEBORAH\\b", "\\bSTEPHANIE\\b", "\\bREBECCA\\b", "\\bLAURA\\b",
-            "\\bSHE\\b", "\\bHER\\b", "\\bWOMAN\\b", "\\bGIRL\\b", "\\bLADY\\b", "\\bMOTHER\\b", "\\bMOM\\b",
-            "\\bDAUGHTER\\b", "\\bSISTER\\b", "\\bAUNT\\b"
-        ]
-        
-        // Check for male patterns
-        for pattern in malePatterns {
-            if name.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil {
-                return "M"
-            }
-        }
-        
-        // Check for female patterns
-        for pattern in femalePatterns {
-            if name.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil {
-                return "F"
-            }
-        }
-        
-        // Default to random if no gender pattern detected
-        return "random"
+        return ScriptParserLogic.detectGenderFromName(name)
     }
     
     // MARK: - Screenplay Parsing
     
     private func parseScreenplay(_ text: String) -> [ScriptSection] {
-        print("DEBUG: Starting screenplay parsing for text of length \(text.count)")
-        var sections: [ScriptSection] = []
-        var currentSection = ""
-        var currentType: SectionType = .narrator
-        
-        // Split the text into lines
-        let lines = text.components(separatedBy: .newlines)
-        
-        var i = 0
-        while i < lines.count {
-            let line = lines[i]
-            let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            
-            // Skip empty lines unless they're between sections
-            if trimmedLine.isEmpty {
-                // Add a newline to the current section buffer if it's not empty
-                if !currentSection.isEmpty {
-                    currentSection += "\n"
-                }
-                i += 1
-                continue
-            }
-            
-            // Check for scene headings (INT./EXT.)
-            if isSceneHeading(line) {
-                // If we have content in the buffer, add it as a section
-                if !currentSection.isEmpty {
-                    sections.append(ScriptSection(type: currentType, text: currentSection.trimmingCharacters(in: .whitespacesAndNewlines)))
-                    currentSection = ""
-                }
-                
-                // Start a new scene heading section
-                currentType = .sceneHeading
-                currentSection = line
-                
-                // Look ahead for additional scene heading lines
-                var j = i + 1
-                while j < lines.count && !isSceneHeading(lines[j]) && !isCharacterLine(lines[j]) && !lines[j].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    currentSection += "\n" + lines[j]
-                    j += 1
-                }
-                
-                // Add this completed scene heading
-                sections.append(ScriptSection(type: .sceneHeading, text: currentSection.trimmingCharacters(in: .whitespacesAndNewlines)))
-                currentSection = ""
-                currentType = .narrator
-                
-                // Skip to the last processed line index in the next iteration
-                i = j
-                continue
-            }
-            
-            // Check for character names
-            if isCharacterLine(line) {
-                // If we have content in the buffer, add it as a section
-                if !currentSection.isEmpty {
-                    sections.append(ScriptSection(type: currentType, text: currentSection.trimmingCharacters(in: .whitespacesAndNewlines)))
-                    currentSection = ""
-                }
-                
-                // Start a new character section with the character name
-                currentType = .character
-                currentSection = line
-                
-                // Look ahead for dialog lines
-                var j = i + 1
-                var consecutiveEmptyLines = 0
-                var dialogLineCount = 0
-                
-                // Process dialog until we hit another character, scene heading, or narrative description
-                while j < lines.count && !isSceneHeading(lines[j]) && !isCharacterLine(lines[j]) {
-                    let nextLine = lines[j]
-                    let nextTrimmed = nextLine.trimmingCharacters(in: .whitespacesAndNewlines)
-                    
-                    // Track empty lines
-                    if nextTrimmed.isEmpty {
-                        consecutiveEmptyLines += 1
-                    } else {
-                        consecutiveEmptyLines = 0
-                    }
-                    
-                    // Check for action words that indicate narrative, not dialog
-                    let isActionLine = isLikelyNarrative(nextTrimmed) || 
-                                       isSentenceWithAction(nextTrimmed)
-                    
-                    // Add dialog line if it's not empty and not an action line
-                    if !nextTrimmed.isEmpty {
-                        if isActionLine || dialogLineCount >= 3 {
-                            // Stop at narrative description or after 3 dialog lines
-                            // (most character dialog in screenplays is 1-3 lines)
-                            break
-                        }
-                        
-                        currentSection += "\n" + nextLine
-                        dialogLineCount += 1
-                    } else if !currentSection.hasSuffix("\n\n") {
-                        // Add at most one blank line to preserve formatting
-                        currentSection += "\n"
-                    }
-                    
-                    j += 1
-                    
-                    // If we've seen one or more consecutive blank lines followed by text, 
-                    // it likely indicates the start of a new section
-                    if consecutiveEmptyLines >= 1 && j < lines.count && 
-                       !lines[j].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        break
-                    }
-                }
-                
-                // Add this completed character dialog
-                sections.append(ScriptSection(type: .character, text: currentSection.trimmingCharacters(in: .whitespacesAndNewlines)))
-                currentSection = ""
-                currentType = .narrator
-                
-                // Skip to the last processed line index in the next iteration
-                i = j
-                continue
-            }
-            
-            // For narration/action text
-            if currentType != .narrator {
-                // If we were building another type of section, finalize it
-                if !currentSection.isEmpty {
-                    sections.append(ScriptSection(type: currentType, text: currentSection.trimmingCharacters(in: .whitespacesAndNewlines)))
-                    currentSection = ""
-                }
-                currentType = .narrator
-            }
-            
-            // Add this line to the current narration section
-            if !currentSection.isEmpty {
-                currentSection += "\n"
-            }
-            currentSection += line
-            
-            // Increment counter for next iteration
-            i += 1
-        }
-        
-        // Add any remaining section
-        if !currentSection.isEmpty {
-            sections.append(ScriptSection(type: currentType, text: currentSection.trimmingCharacters(in: .whitespacesAndNewlines)))
-        }
-        
-        return sections
-    }
-    
-    private func isSceneHeading(_ line: String) -> Bool {
-        let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Skip empty lines
-        if trimmedLine.isEmpty {
-            return false
-        }
-        
-        // Traditional scene heading patterns
-        let sceneHeadingPatterns = [
-            "^INT\\. ", "^EXT\\. ", "^INT\\./EXT\\. ", "^I/E ", 
-            "^INTERIOR ", "^EXTERIOR ", "^INT ", "^EXT "
-        ]
-        
-        for pattern in sceneHeadingPatterns {
-            if trimmedLine.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil {
-                return true
-            }
-        }
-        
-        // Special case for ALL CAPS scene headings that include DAY/NIGHT
-        let timeIndicators = ["DAY", "NIGHT", "MORNING", "EVENING", "DUSK", "DAWN", "AFTERNOON", "CONTINUOUS", "LATER"]
-        
-        if trimmedLine == trimmedLine.uppercased() && !trimmedLine.contains("(") {
-            for indicator in timeIndicators {
-                if trimmedLine.contains(indicator) {
-                    // Make sure this isn't a character name wrongly identified as scene heading
-                    let hasSceneContext = trimmedLine.contains("ROOM") || 
-                                          trimmedLine.contains("HOUSE") || 
-                                          trimmedLine.contains("BUILDING") ||
-                                          trimmedLine.contains("STREET") ||
-                                          trimmedLine.contains("HALLWAY") ||
-                                          trimmedLine.contains("OFFICE")
-                    
-                    if hasSceneContext {
-                        return true
-                    }
-                }
-            }
-        }
-        
-        // Numbered scene headings like "SCENE 1" or "SC. 1"
-        let numberedScenePattern = "^\\s*(SCENE|SC\\.?)\\s+([0-9]+)"
-        if trimmedLine.range(of: numberedScenePattern, options: [.regularExpression, .caseInsensitive]) != nil {
-            return true
-        }
-        
-        return false
-    }
-    
-    private func isCharacterLine(_ line: String) -> Bool {
-        let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Skip empty lines
-        if trimmedLine.isEmpty {
-            return false
-        }
-        
-        // Character name criteria:
-        // 1. All caps (traditional screenplay format)
-        let isAllCaps = trimmedLine == trimmedLine.uppercased() && 
-                        trimmedLine.range(of: "^[A-Z0-9 .,'()\\-#]+$", options: .regularExpression) != nil
-        
-        // 2. Length is reasonable for a name
-        let hasReasonableLength = trimmedLine.count >= 2 && trimmedLine.count <= 35
-        
-        // 3. Check for parenthetical character notes like "JOHN (O.S.)"
-        let hasParenthetical = trimmedLine.contains("(") && trimmedLine.contains(")")
-        
-        // List of non-character elements to filter out
-        let nonCharacterPhrases = [
-            "FADE IN", "FADE OUT", "CUT TO", "DISSOLVE TO", "SMASH CUT", 
-            "MATCH CUT", "INTERCUT", "TITLE", "SUPER", "MONTAGE", 
-            "FLASHBACK", "END FLASHBACK", "DREAM SEQUENCE", "END DREAM",
-            "CONTINUOUS", "SAME", "LATER", "MOMENTS LATER", "THAT NIGHT",
-            "VERY FAST", "POV", "ANGLE ON", "CLOSE UP", "WIDE SHOT",
-            "INT", "EXT", "INTERIOR", "EXTERIOR", "I/E", "INT/EXT",
-            "PEOPLE", "EVERYBODY", "EVERYONE", "MEN", "WOMEN"
-        ]
-        
-        // Check if line contains any non-character phrases
-        let containsNonCharacterPhrase = nonCharacterPhrases.contains { word in
-            // Only match whole words, not substrings
-            let pattern = "\\b\(word)\\b"
-            return trimmedLine.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
-        }
-        
-        // Check for sound effects (often in all caps)
-        let isSoundEffect = trimmedLine.contains("!") || 
-                           trimmedLine.contains("BAAM") || 
-                           trimmedLine.contains("BOOM") ||
-                           trimmedLine.contains("CRASH") ||
-                           trimmedLine.contains("BANG")
-        
-        // Check for common verbs that indicate action, not character names
-        let containsActionVerb = trimmedLine.range(of: "\\b(DROP|MOVE|LOOK|ENTER|EXIT|RUN|JUMP|SHOOT|FIRE|OPEN|CLOSE|WALK|TAKE|GIVE|SHOW)\\b", 
-                                                 options: [.regularExpression]) != nil
-        
-        // Decide if this is a character name
-        let isCharacterName = isAllCaps && 
-                             hasReasonableLength && 
-                             !containsNonCharacterPhrase && 
-                             !isSoundEffect &&
-                             !containsActionVerb &&
-                             (!trimmedLine.contains(".") || hasParenthetical) &&
-                             !trimmedLine.hasSuffix(":") &&
-                             !trimmedLine.hasSuffix("--")
-        
-        return isCharacterName
-    }
-    
-    private func isLikelyNarrative(_ line: String) -> Bool {
-        let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Skip empty lines
-        if trimmedLine.isEmpty {
-            return false
-        }
-        
-        // Check if it's a character description (usually in parentheses or all caps)
-        if trimmedLine.contains("(") && trimmedLine.contains(")") && 
-           (trimmedLine.contains("years old") || 
-            trimmedLine.contains("20s") || 
-            trimmedLine.contains("30s") || 
-            trimmedLine.contains("40s") || 
-            trimmedLine.contains("50s") || 
-            trimmedLine.contains("engineer") || 
-            trimmedLine.contains("student") || 
-            trimmedLine.contains("professional") || 
-            trimmedLine.contains("wearing")) {
-            return true
-        }
-        
-        // Check for common character intro patterns like "JOHN enters the room"
-        let characterIntroPattern = "^[A-Z]{2,} +(enters|walks|sits|stands|looks|appears)"
-        if trimmedLine.range(of: characterIntroPattern, options: .regularExpression) != nil {
-            return true
-        }
-        
-        // Check if the whole line is in ALL CAPS (often used for emphasis or character intro)
-        let isAllCaps = trimmedLine == trimmedLine.uppercased() && trimmedLine.count > 10
-        
-        // Check for plural words that are typically used in narrative descriptions, not dialog
-        let pluralWordsPattern = "\\b(PEOPLE|EVERYBODY|CROWD|MEN|WOMEN|CHILDREN|CUSTOMERS|EMPLOYEES)\\b"
-        if trimmedLine.range(of: pluralWordsPattern, options: .regularExpression) != nil {
-            return true
-        }
-        
-        return isAllCaps
-    }
-    
-    // Helper to detect sentences that describe actions, not dialog
-    private func isSentenceWithAction(_ line: String) -> Bool {
-        let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Skip empty lines
-        if trimmedLine.isEmpty {
-            return false
-        }
-        
-        // Common action verbs in screenplay narrative
-        let actionVerbPattern = "\\b(drop|move|run|walk|enter|exit|open|close|slam|hit|grab|take|" +
-                               "pull|push|fire|shoot|jump|fall|rise|burst|crash|explode|fade|cut|" +
-                               "dissolve|pan|track|zoom|watches|nods|shakes|turns|stands|sits|crouches)\\b"
-        
-        // Check if the sentence contains action verbs
-        if trimmedLine.range(of: actionVerbPattern, options: [.regularExpression, .caseInsensitive]) != nil {
-            return true
-        }
-        
-        // Look for subject + verb structures that indicate narrative
-        let subjectVerbPattern = "\\b(he|she|they|the|a|an|some|people|men|women)\\s+(\\w+s|is|are|has|have|had|was|were)\\b"
-        if trimmedLine.range(of: subjectVerbPattern, options: [.regularExpression, .caseInsensitive]) != nil {
-            return true
-        }
-        
-        // Directions and transitions are narrative
-        let directionPattern = "\\b(ANGLE ON|CUT TO|PAN TO|CLOSE UP|WIDE SHOT|FADE|DISSOLVE)\\b"
-        if trimmedLine.range(of: directionPattern, options: [.regularExpression]) != nil {
-            return true
-        }
-        
-        return false
+        // This method is maintained for backward compatibility
+        // All screenplay parsing logic is now in ScriptParserLogic class
+        return ScriptParserLogic.parseScreenplay(text)
     }
 }
 
-struct ScriptSection: Identifiable, Equatable {
-    let id = UUID()
-    let type: SectionType
-    let text: String
-    
-    static func == (lhs: ScriptSection, rhs: ScriptSection) -> Bool {
-        return lhs.id == rhs.id
-    }
-}
-
-enum SectionType {
-    case narrator
-    case character
-    case sceneHeading
-}
+// Using ScriptSection and SectionType from ScriptParserLogic
 
 // A delegate class to track speech state
 class SpeechDelegate: NSObject, AVSpeechSynthesizerDelegate {

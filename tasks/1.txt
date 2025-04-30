@@ -34,7 +34,7 @@ Common Parsing Pitfalls
 
 Advanced Challenges
 -----------------
-1. Some character names include descriptions in parentheses: "SARAH (30s, CEO)"
+1. Character descriptions with parentheses in NARRATOR blocks (e.g., "SARAH (30s, CEO)") must not be confused with actual dialog character names, which are centered/indented.
 2. Dialog might contain multiple paragraphs separated by empty lines.
 3. Parenthetical stage directions can appear mid-dialog.
 4. PDFs may have different indentation styles across different files.
