@@ -552,8 +552,24 @@ struct ScriptParserView: View {
         // Clear processed characters to reuse when assigning voices
         processedCharacters.removeAll()
         
+        // Filter out characters that might be incorrectly identified based on structure
+        let validCharacters = characters.filter { character, _ in
+            // Look for structural patterns to identify valid character names
+            
+            // Very long names with hash symbols are likely not character names
+            let hasHash = character.contains("#")
+            let isLong = character.count > 15
+            
+            // Exclude characters that don't match structural patterns for character names
+            if hasHash && isLong {
+                return false
+            }
+            
+            return true
+        }
+        
         // Sort characters by gender to group similar genders together
-        let sortedCharacters = characters.sorted { $0.gender < $1.gender }
+        let sortedCharacters = validCharacters.sorted { $0.gender < $1.gender }
         
         // Now assign voices to each character
         for (character, gender) in sortedCharacters {

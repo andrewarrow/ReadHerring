@@ -114,6 +114,13 @@ public class ScriptParserLogic {
             let line = lines[i]
             let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
             
+            // Check if this might be a character name followed by potential dialogue
+            // using STRUCTURAL patterns (not specific content matching)
+            let isPotentialCharacterLine = trimmedLine == trimmedLine.uppercased() && 
+                trimmedLine.count < 15 &&
+                i+1 < lines.count && 
+                !lines[i+1].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            
             // Skip empty lines but preserve them in the current section
             if trimmedLine.isEmpty {
                 if !currentSection.isEmpty {
@@ -166,9 +173,9 @@ public class ScriptParserLogic {
             // Detect character cue lines (pure ALL-CAPS) – but exclude narrative
             // action lines that start with a name followed by lowercase
             // narrative such as "JESSICA (30s …) bounds in …".
-            if !startsWithCapsNameAndNarrative(line) &&
+            if (!startsWithCapsNameAndNarrative(line) &&
                (isCharacterName(line) || (i > 0 && isAllCapsNameAtStartOfLine(line))) &&
-               !isSceneHeading(line) {
+               !isSceneHeading(line)) || isPotentialCharacterLine {
                 // Make sure to add any pending non-empty section
                 if !currentSection.isEmpty {
                     sections.append(ScriptSection(type: currentSectionType, text: currentSection.trimmingCharacters(in: .whitespacesAndNewlines)))
@@ -176,11 +183,38 @@ public class ScriptParserLogic {
                 }
                 
                 // Start a new character section
-                let characterName = extractCharacterName(line)
-                let dialogLines = extractDialogFromLine(line)
+                let characterName = isPotentialCharacterLine ? trimmedLine : extractCharacterName(line)
+                
+                // Skip if character name is empty (special case filtering)
+                if characterName.isEmpty {
+                    // Treat this as a regular narrative line instead
+                    if currentSectionType != .narrator {
+                        // We've switched from character to narrative, add the character section
+                        if !currentSection.isEmpty {
+                            sections.append(ScriptSection(type: currentSectionType, text: currentSection.trimmingCharacters(in: .whitespacesAndNewlines)))
+                            currentSection = ""
+                        }
+                        currentSectionType = .narrator
+                    }
+                    
+                    // Add to narrative section
+                    if !currentSection.isEmpty {
+                        currentSection += "\n"
+                    }
+                    currentSection += line
+                    i += 1
+                    continue
+                }
+                
+                let dialogLines = isPotentialCharacterLine && i+1 < lines.count ? 
+                               lines[i+1].trimmingCharacters(in: .whitespacesAndNewlines) : 
+                               extractDialogFromLine(line)
                 
                 currentSection = characterName
-                if !dialogLines.isEmpty {
+                if isPotentialCharacterLine && i+1 < lines.count {
+                    currentSection += "\n" + lines[i+1].trimmingCharacters(in: .whitespacesAndNewlines)
+                    i += 1 // Skip the next line since we've incorporated it as dialogue
+                } else if !dialogLines.isEmpty {
                     currentSection += "\n" + dialogLines
                 }
                 
@@ -321,9 +355,20 @@ public class ScriptParserLogic {
         // Remove any parenthetical description – those frequently follow the
         // name on the same line (e.g. "SARAH (O.S.)").
         let withoutParenthetical = trimmed.components(separatedBy: "(").first ?? trimmed
+        let potentialName = withoutParenthetical.trimmingCharacters(in: .whitespaces)
+        
+        // Check for structural patterns that indicate this isn't a character name
+        let hasHash = potentialName.contains("#")
+        let hasNumbers = potentialName.rangeOfCharacter(from: CharacterSet.decimalDigits) != nil
+        
+        // Check structural patterns: character names with # symbols that are longer
+        // than typical character names are more likely action descriptions
+        if hasHash && potentialName.count > 15 {
+            return "" // Return empty string to signal this isn't a valid character name
+        }
 
         // Return the remaining ALL-CAPS portion as the name.
-        return withoutParenthetical.trimmingCharacters(in: .whitespaces)
+        return potentialName
     }
     
     /// Extract dialog text from a line that contains a character name
@@ -743,6 +788,20 @@ public class ScriptParserLogic {
         // Must be reasonably short and contain at most a few words.
         if trimmed.count > 40 { return false }
         if trimmed.split(separator: " ").count > 4 { return false }
+        
+        // Structural check: hash symbols (#) in ALL CAPS text could be either:
+        // 1. A character name with a number designation (e.g., "SOLDIER #1") - especially if standalone 
+        // 2. An action/scene direction - especially if embedded in narrative
+        // We need structural cues to distinguish between them
+        
+        // Check if this is a numbered character - structurally standalone with just a name
+        let hasNumbers = trimmed.rangeOfCharacter(from: CharacterSet.decimalDigits) != nil
+        let hasHash = trimmed.contains("#")
+        
+        // If a line has a hash and is longer than 15 chars, it's more likely a direction than a character
+        if hasHash && trimmed.count > 15 {
+            return false
+        }
 
         // Should not contain a period unless it is an abbreviation like O.S. or V.O.
         // We'll allow periods as long as every token is <=3 chars (heuristic).
@@ -768,6 +827,16 @@ public class ScriptParserLogic {
         if !isAllCaps { return false }
 
         if namePart.count > 40 { return false }
+        
+        // Structural check for numbered characters (e.g., those with # or digits)
+        let hasHash = namePart.contains("#")
+        let hasNumbers = namePart.rangeOfCharacter(from: CharacterSet.decimalDigits) != nil
+        
+        // Longer numbered names are more likely to be action descriptions than character names
+        // This is a structural pattern - character names tend to be short
+        if hasHash && namePart.count > 15 {
+            return false
+        }
 
         return true
     }
